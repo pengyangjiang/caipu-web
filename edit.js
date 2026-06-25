@@ -305,6 +305,20 @@ async function pollAiGeneration(agentId, runId, name, id) {
   }
 }
 
+function formatAiError(error) {
+  const message = String(error?.message || "");
+  if (error?.code === "CURSOR_NOT_CONFIGURED") {
+    return "服务器未配置 CURSOR_API_KEY，无法使用 AI 生成";
+  }
+  if (/storage mode is disabled/i.test(message)) {
+    return "Cursor 账号未开启 Storage：请在 Cursor 桌面端 Settings → Privacy 中，从「Privacy Mode (Legacy)」切换为「Privacy Mode」，或在 Dashboard → Cloud Agents 中启用存储。切换后重试。";
+  }
+  if (/privacy mode.*legacy/i.test(message)) {
+    return "当前为 Privacy Mode (Legacy)，不支持 Cloud Agents API。请在 Cursor 设置中切换为新版 Privacy Mode 后重试。";
+  }
+  return message || "AI 生成失败";
+}
+
 async function startAiGeneration() {
   if (!state.isNew || state.generating || !api.startRecipeGeneration) return;
 
@@ -334,10 +348,7 @@ async function startAiGeneration() {
     await pollAiGeneration(started.agentId, started.runId, name, id);
   } catch (error) {
     console.error(error);
-    const message = error?.code === "CURSOR_NOT_CONFIGURED"
-      ? "服务器未配置 CURSOR_API_KEY，无法使用 AI 生成"
-      : (error?.message || "AI 生成失败");
-    setNotice(message, "error");
+    setNotice(formatAiError(error), "error");
     editStatus.textContent = "AI 生成失败";
   } finally {
     state.generating = false;

@@ -6,6 +6,7 @@ const { createStore } = require('./store');
 
 const store = createStore();
 const cursorRecipePromise = import('../shared/cursor-recipe.mjs');
+const loginRateLimitPromise = import('../shared/login-rate-limit.mjs');
 const PORT = Number(process.env.PORT || 3000);
 const ADMIN_TOKEN = process.env.ADMIN_TOKEN || 'demo-admin-token';
 const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || 'admin123';
@@ -128,6 +129,25 @@ function badRequest(res, message = 'Bad request') {
       message,
     },
   });
+}
+
+function tooManyRequests(res, retryAfterSeconds, message) {
+  const body = JSON.stringify({
+    ok: false,
+    error: {
+      code: 'RATE_LIMITED',
+      message: message || `登录过于频繁，请 ${retryAfterSeconds} 秒后再试`,
+      retryAfterSeconds,
+    },
+  }, null, 2);
+  res.writeHead(429, {
+    'Content-Type': 'application/json; charset=utf-8',
+    'Retry-After': String(retryAfterSeconds),
+    'Access-Control-Allow-Origin': '*',
+    'Access-Control-Allow-Headers': 'Content-Type, Authorization, X-Admin-Token',
+    'Access-Control-Allow-Methods': 'GET,POST,PATCH,OPTIONS',
+  });
+  res.end(body);
 }
 
 function ok(res, data, statusCode = 200) {
@@ -348,6 +368,22 @@ async function handleRequest(req, res) {
   }
 
   if (pathname === '/api/admin/login' && req.method === 'POST') {
+    const {
+      getClientIpFromRequest,
+      checkLoginRateLimit,
+      recordLoginAttempt,
+    } = await loginRateLimitPromise;
+    const clientIp = getClientIpFromRequest(
+      { headers: req.headers },
+      req.socket?.remoteAddress || 'unknown',
+    );
+    const rateCheck = await checkLoginRateLimit(null, clientIp);
+    if (!rateCheck.allowed) {
+      tooManyRequests(res, rateCheck.retryAfterSeconds);
+      return;
+    }
+    await recordLoginAttempt(null, clientIp);
+
     let payload;
     try {
       payload = await readBody(req);

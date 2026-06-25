@@ -1,4 +1,9 @@
 import { startRecipeGeneration, pollRecipeGeneration } from '../../shared/cursor-recipe.mjs';
+import {
+  getClientIpFromRequest,
+  checkLoginRateLimit,
+  recordLoginAttempt,
+} from '../../shared/login-rate-limit.mjs';
 
 const CORS_HEADERS = {
   'Access-Control-Allow-Origin': '*',
@@ -6,22 +11,31 @@ const CORS_HEADERS = {
   'Access-Control-Allow-Methods': 'GET,POST,PATCH,OPTIONS',
 };
 
-function json(payload, status = 200) {
+function fail(code, message, status = 400, extra = {}) {
+  const { responseHeaders, ...errorExtra } = extra;
+  return json({
+    ok: false,
+    error: {
+      code,
+      message,
+      ...errorExtra,
+    },
+  }, status, responseHeaders || {});
+}
+
+function json(payload, status = 200, extraHeaders = {}) {
   return new Response(JSON.stringify(payload, null, 2), {
     status,
     headers: {
       'Content-Type': 'application/json; charset=utf-8',
       ...CORS_HEADERS,
+      ...extraHeaders,
     },
   });
 }
 
 function ok(data, status = 200) {
   return json({ ok: true, data }, status);
-}
-
-function fail(code, message, status = 400) {
-  return json({ ok: false, error: { code, message } }, status);
 }
 
 function clone(value) {
@@ -431,6 +445,21 @@ export async function onRequest(context) {
           503,
         );
       }
+
+      const clientIp = getClientIpFromRequest(request, 'unknown');
+      const rateCheck = await checkLoginRateLimit(env.CONTENT_KV, clientIp);
+      if (!rateCheck.allowed) {
+        return fail(
+          'RATE_LIMITED',
+          `登录过于频繁，请 ${rateCheck.retryAfterSeconds} 秒后再试`,
+          429,
+          {
+            retryAfterSeconds: rateCheck.retryAfterSeconds,
+            responseHeaders: { 'Retry-After': String(rateCheck.retryAfterSeconds) },
+          },
+        );
+      }
+      await recordLoginAttempt(env.CONTENT_KV, clientIp);
 
       let payload;
       try {

@@ -27,6 +27,10 @@ async function login(password) {
 
   const payload = await response.json().catch(() => null);
   if (!response.ok || !payload?.ok) {
+    if (payload?.error?.code === 'RATE_LIMITED') {
+      const seconds = payload.error.retryAfterSeconds || 30;
+      throw new Error(`登录过于频繁，请 ${seconds} 秒后再试`);
+    }
     const message = payload?.error?.message || `登录失败（${response.status}）`;
     throw new Error(message);
   }
