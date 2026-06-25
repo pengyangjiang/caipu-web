@@ -618,6 +618,7 @@ function renderHeaderActions(recipe) {
   detailActions.innerHTML = `
     <a class="action-link" href="./recipe.html?id=${encodeURIComponent(prevId)}">← 上一个</a>
     <a class="action-link" href="./recipe.html?id=${encodeURIComponent(nextId)}">下一个 →</a>
+    <a class="action-link" href="./recipes.html">全部菜品</a>
     <a class="action-link" href="./shopping.html">购物清单</a>
     ${editLink ? `<a class="action-link" href="${editLink}">编辑</a>` : ""}
     ${newRecipeLink ? `<a class="action-link" href="${newRecipeLink}">新建菜谱</a>` : ""}

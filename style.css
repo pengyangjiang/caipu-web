@@ -1821,6 +1821,30 @@ input {
   font-size: 12px;
 }
 
+.recipes-page .recipes-shell {
+  padding: 24px;
+}
+
+.recipes-toolbar {
+  display: grid;
+  gap: 16px;
+  margin-bottom: 20px;
+}
+
+.recipes-search {
+  max-width: 520px;
+}
+
+.recipes-meta {
+  margin: 0;
+  color: var(--muted);
+  font-size: 14px;
+}
+
+.recipes-page-title {
+  margin-top: 8px;
+}
+
 .edit-page {
   display: grid;
   gap: 22px;

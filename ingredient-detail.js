@@ -1,4 +1,4 @@
-﻿const catalog = window.recipeCatalog;
+const catalog = window.recipeCatalog;
 const ingredientDetails = window.ingredientDetails;
 const contentApi = window.contentApi;
 
@@ -173,6 +173,7 @@ function renderHeaderActions(ingredient) {
     : `<a class="action-link" href="${loginLink}">管理员登录</a>`;
   ingredientActions.innerHTML = `
     <a class="action-link" href="./ingredient.html?id=${encodeURIComponent(ingredient.id)}">刷新</a>
+    <a class="action-link" href="./recipes.html">全部菜品</a>
     <a class="action-link" href="./shopping.html">购物清单</a>
     ${editLink ? `<a class="action-link" href="${editLink}">编辑</a>` : ""}
     ${logoutButton}

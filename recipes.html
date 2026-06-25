@@ -1,0 +1,51 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>全部菜品</title>
+    <link rel="stylesheet" href="./style.css" />
+  </head>
+  <body>
+    <main class="page recipes-page">
+      <header class="page-header">
+        <div class="page-header-left">
+          <a class="back-link" href="./index.html">← 返回搜索页</a>
+          <p class="page-breadcrumb">全部菜品</p>
+          <h1 class="page-title recipes-page-title">浏览所有可选菜谱</h1>
+          <p class="page-desc">
+            按分类筛选或搜索菜名、标签，点击卡片进入详情页查看做法与营养信息。
+          </p>
+        </div>
+        <div class="page-header-actions">
+          <a class="action-link" href="./index.html">智能搜索</a>
+          <a class="action-link" href="./shopping.html">购物清单</a>
+        </div>
+      </header>
+
+      <section class="panel recipes-shell">
+        <div class="recipes-toolbar">
+          <label class="search-bar recipes-search" for="recipesSearch">
+            <span class="search-icon">⌕</span>
+            <input
+              id="recipesSearch"
+              type="search"
+              placeholder="搜索菜名、标签、食材..."
+              autocomplete="off"
+            />
+          </label>
+          <div class="category-row" id="recipesCategoryChips"></div>
+          <p class="recipes-meta" id="recipesMeta">正在加载菜品...</p>
+        </div>
+
+        <div class="recipe-grid" id="recipesGrid"></div>
+      </section>
+    </main>
+
+    <script src="./data.js"></script>
+    <script src="./content-model.js"></script>
+    <script src="./config.js"></script>
+    <script src="./api-client.js"></script>
+    <script src="./recipes.js"></script>
+  </body>
+</html>
