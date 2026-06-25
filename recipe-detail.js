@@ -9,11 +9,16 @@ const detailRoot = document.getElementById("detailRoot");
 const recipeBreadcrumb = document.getElementById("recipeBreadcrumb");
 const detailActions = document.getElementById("detailActions");
 const recipeAdminStatus = document.getElementById("recipeAdminStatus");
+const deleteRecipeModal = document.getElementById("deleteRecipeModal");
+const deleteRecipeName = document.getElementById("deleteRecipeName");
+const deleteRecipeHint = document.getElementById("deleteRecipeHint");
+const confirmDeleteRecipeBtn = document.getElementById("confirmDeleteRecipeBtn");
 
 const FAVORITE_KEY = "recipe-favorites";
 const COOK_COUNT_KEY = "recipe-cook-counts";
 const SHOPPING_LIST_KEY = "recipe-shopping-list";
 let currentRenderedRecipe = null;
+let pendingDeleteRecipe = null;
 
 function renderEmpty(message) {
   return `<div class="empty-state">${message}</div>`;
@@ -603,6 +608,54 @@ function renderRelated(recipe) {
   `;
 }
 
+function openDeleteRecipeModal(recipe) {
+  if (!deleteRecipeModal || !recipe) return;
+
+  pendingDeleteRecipe = recipe;
+  if (deleteRecipeName) deleteRecipeName.textContent = recipe.name;
+  if (deleteRecipeHint) {
+    deleteRecipeHint.textContent = contentApi.isRemoteConfigured()
+      ? "此操作需要管理员权限，并会同步到线上数据。"
+      : "此操作会在当前浏览器中隐藏该菜谱。";
+  }
+
+  deleteRecipeModal.hidden = false;
+  document.body.style.overflow = "hidden";
+  if (confirmDeleteRecipeBtn) {
+    confirmDeleteRecipeBtn.disabled = false;
+    confirmDeleteRecipeBtn.textContent = "确认删除";
+    confirmDeleteRecipeBtn.focus();
+  }
+}
+
+function closeDeleteRecipeModal() {
+  if (!deleteRecipeModal) return;
+  deleteRecipeModal.hidden = true;
+  document.body.style.overflow = "";
+  pendingDeleteRecipe = null;
+}
+
+async function confirmDeleteRecipe() {
+  if (!pendingDeleteRecipe || !contentApi.deleteContent || !confirmDeleteRecipeBtn) return;
+
+  const recipe = pendingDeleteRecipe;
+  confirmDeleteRecipeBtn.disabled = true;
+  confirmDeleteRecipeBtn.textContent = "正在删除...";
+
+  try {
+    await contentApi.deleteContent("recipe", recipe.id);
+    closeDeleteRecipeModal();
+    window.uiToast?.show(`已删除「${recipe.name}」`, { type: "success", duration: 1200 });
+    window.setTimeout(() => {
+      window.location.href = "./recipes.html";
+    }, 450);
+  } catch (error) {
+    confirmDeleteRecipeBtn.disabled = false;
+    confirmDeleteRecipeBtn.textContent = "确认删除";
+    window.uiToast?.show(error?.message || "删除失败", { type: "error", duration: 2000 });
+  }
+}
+
 function renderHeaderActions(recipe) {
   const { prevId, nextId } = getAdjacentRecipeIds(recipe.id);
   const favoriteActive = isFavorited(recipe.id);
@@ -621,6 +674,7 @@ function renderHeaderActions(recipe) {
     <a class="action-link" href="./recipes.html">全部菜品</a>
     <a class="action-link" href="./shopping.html">购物清单</a>
     ${editLink ? `<a class="action-link" href="${editLink}">编辑</a>` : ""}
+    ${contentApi.canEdit() ? `<button class="action-link is-danger" type="button" id="deleteRecipeBtn">删除菜谱</button>` : ""}
     ${newRecipeLink ? `<a class="action-link" href="${newRecipeLink}">新建菜谱</a>` : ""}
     ${logoutButton}
     <button class="favorite-button ${favoriteActive ? "is-active" : ""}" type="button" data-favorite-id="${recipe.id}">
@@ -707,6 +761,13 @@ function renderRecipeDetail(recipe) {
     });
   }
 
+  const deleteButton = detailActions.querySelector("#deleteRecipeBtn");
+  if (deleteButton) {
+    deleteButton.addEventListener("click", () => {
+      openDeleteRecipeModal(recipe);
+    });
+  }
+
   const cookButtons = detailRoot.querySelectorAll("[data-cook-action]");
   cookButtons.forEach((button) => {
     button.addEventListener("click", () => {
@@ -746,6 +807,22 @@ function syncCoverImageState(recipe) {
 }
 
 (async function init() {
+  if (deleteRecipeModal) {
+    deleteRecipeModal.addEventListener("click", (event) => {
+      if (event.target.closest("[data-close-delete-modal]")) {
+        closeDeleteRecipeModal();
+      }
+    });
+  }
+
+  confirmDeleteRecipeBtn?.addEventListener("click", confirmDeleteRecipe);
+
+  window.addEventListener("keydown", (event) => {
+    if (event.key === "Escape" && deleteRecipeModal && !deleteRecipeModal.hidden) {
+      closeDeleteRecipeModal();
+    }
+  });
+
   if (contentApi?.listRecipes) {
     const remoteList = await contentApi.listRecipes();
     if (Array.isArray(remoteList) && remoteList.length > 0) {

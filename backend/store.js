@@ -273,6 +273,13 @@ function createStore() {
     createRecipe(id, patch) {
       return createRecipeRecord(id, patch);
     },
+    deleteRecipe(id) {
+      const normalizedId = String(id || '').trim();
+      assertRecord(recipes[normalizedId], 'Recipe');
+      delete recipes[normalizedId];
+      persist();
+      return { id: normalizedId, deleted: true };
+    },
   };
 }
 

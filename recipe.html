@@ -22,6 +22,23 @@
       </section>
     </main>
 
+    <div class="confirm-modal" id="deleteRecipeModal" hidden>
+      <div class="confirm-modal-backdrop" data-close-delete-modal></div>
+      <div class="confirm-modal-dialog" role="dialog" aria-modal="true" aria-labelledby="deleteModalTitle">
+        <div class="confirm-modal-icon" aria-hidden="true">!</div>
+        <p class="confirm-modal-eyebrow">危险操作</p>
+        <h2 class="confirm-modal-title" id="deleteModalTitle">确认删除这道菜谱？</h2>
+        <p class="confirm-modal-desc">
+          即将删除「<strong id="deleteRecipeName">当前菜谱</strong>」。删除后无法恢复，列表和详情页将不再显示。
+        </p>
+        <p class="confirm-modal-note" id="deleteRecipeHint">此操作需要管理员权限，并会同步到线上数据。</p>
+        <div class="confirm-modal-actions">
+          <button class="action-link confirm-modal-cancel" type="button" data-close-delete-modal>取消</button>
+          <button class="confirm-modal-danger" type="button" id="confirmDeleteRecipeBtn">确认删除</button>
+        </div>
+      </div>
+    </div>
+
     <script src="./data.js"></script>
     <script src="./recipe-details.js"></script>
     <script src="./content-model.js"></script>

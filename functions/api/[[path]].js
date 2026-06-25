@@ -8,7 +8,7 @@ import {
 const CORS_HEADERS = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'Content-Type, Authorization, X-Admin-Token',
-  'Access-Control-Allow-Methods': 'GET,POST,PATCH,OPTIONS',
+  'Access-Control-Allow-Methods': 'GET,POST,PATCH,DELETE,OPTIONS',
 };
 
 function fail(code, message, status = 400, extra = {}) {
@@ -329,6 +329,34 @@ async function handleDetail(request, env, type, id) {
       }
       return fail('BAD_REQUEST', error.message || 'Unable to save record', 400);
     }
+  }
+
+  if (request.method === 'DELETE') {
+    if (!isAdmin(request, env)) {
+      return fail('FORBIDDEN', 'Admin permission required', 403);
+    }
+
+    if (type !== 'recipe') {
+      return new Response('Method Not Allowed', { status: 405, headers: CORS_HEADERS });
+    }
+
+    const current = map[id];
+    if (!current) {
+      return fail('NOT_FOUND', `${type} not found`, 404);
+    }
+
+    delete map[id];
+
+    try {
+      await persistStore(env, store.recipes, store.ingredients);
+    } catch (error) {
+      if (error.code === 'KV_NOT_CONFIGURED') {
+        return fail('KV_NOT_CONFIGURED', error.message, 503);
+      }
+      throw error;
+    }
+
+    return ok({ id, deleted: true });
   }
 
   return new Response('Method Not Allowed', { status: 405, headers: CORS_HEADERS });

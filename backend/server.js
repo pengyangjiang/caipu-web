@@ -31,7 +31,7 @@ function sendJson(res, statusCode, payload) {
     'Content-Type': 'application/json; charset=utf-8',
     'Access-Control-Allow-Origin': '*',
     'Access-Control-Allow-Headers': 'Content-Type, Authorization, X-Admin-Token',
-    'Access-Control-Allow-Methods': 'GET,POST,PATCH,OPTIONS',
+    'Access-Control-Allow-Methods': 'GET,POST,PATCH,DELETE,OPTIONS',
   });
   res.end(body);
 }
@@ -41,7 +41,7 @@ function sendText(res, statusCode, text) {
     'Content-Type': 'text/plain; charset=utf-8',
     'Access-Control-Allow-Origin': '*',
     'Access-Control-Allow-Headers': 'Content-Type, Authorization, X-Admin-Token',
-    'Access-Control-Allow-Methods': 'GET,POST,PATCH,OPTIONS',
+    'Access-Control-Allow-Methods': 'GET,POST,PATCH,DELETE,OPTIONS',
   });
   res.end(text);
 }
@@ -145,7 +145,7 @@ function tooManyRequests(res, retryAfterSeconds, message) {
     'Retry-After': String(retryAfterSeconds),
     'Access-Control-Allow-Origin': '*',
     'Access-Control-Allow-Headers': 'Content-Type, Authorization, X-Admin-Token',
-    'Access-Control-Allow-Methods': 'GET,POST,PATCH,OPTIONS',
+    'Access-Control-Allow-Methods': 'GET,POST,PATCH,DELETE,OPTIONS',
   });
   res.end(body);
 }
@@ -262,6 +262,30 @@ async function handleDetail(req, res, type, id) {
     return;
   }
 
+  if (req.method === 'DELETE') {
+    if (!isAdmin(req)) {
+      forbidden(res, 'Admin permission required');
+      return;
+    }
+
+    if (type !== 'recipe') {
+      sendText(res, 405, 'Method Not Allowed');
+      return;
+    }
+
+    try {
+      const deleted = store.deleteRecipe(id);
+      ok(res, deleted);
+    } catch (error) {
+      if (error.code === 'NOT_FOUND') {
+        notFound(res, error.message);
+        return;
+      }
+      badRequest(res, error.message || 'Unable to delete record');
+    }
+    return;
+  }
+
   sendText(res, 405, 'Method Not Allowed');
 }
 
@@ -346,7 +370,7 @@ async function handleRequest(req, res) {
     res.writeHead(204, {
       'Access-Control-Allow-Origin': '*',
       'Access-Control-Allow-Headers': 'Content-Type, Authorization, X-Admin-Token',
-      'Access-Control-Allow-Methods': 'GET,POST,PATCH,OPTIONS',
+      'Access-Control-Allow-Methods': 'GET,POST,PATCH,DELETE,OPTIONS',
     });
     res.end();
     return;

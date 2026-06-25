@@ -33,6 +33,7 @@ node backend/server.js
 - `GET /api/recipes/generate/status`（管理员，轮询 AI 生成状态）
 - `GET /api/recipes/:id`
 - `PATCH /api/recipes/:id`
+- `DELETE /api/recipes/:id`（管理员）
 - `GET /api/ingredients`
 - `GET /api/ingredients/:id`
 - `PATCH /api/ingredients/:id`
