@@ -88,9 +88,32 @@
     return await response.json();
   }
 
+  function pickLatestContent(records) {
+    const valid = records.filter(Boolean);
+    if (!valid.length) return null;
+
+    return valid.sort((a, b) => {
+      const versionDiff = Number(b.version || 0) - Number(a.version || 0);
+      if (versionDiff !== 0) return versionDiff;
+
+      const timeA = Date.parse(a.updatedAt || '') || 0;
+      const timeB = Date.parse(b.updatedAt || '') || 0;
+      if (timeB !== timeA) return timeB - timeA;
+
+      return 0;
+    })[0];
+  }
+
+  let lastSaveTarget = 'local';
+
+  function getLastSaveTarget() {
+    return lastSaveTarget;
+  }
+
   async function loadContent(type, id) {
-    const draft = readDrafts(type)[id];
-    const localRecord = draft || getSourceMap(type)[id] || null;
+    const draft = readDrafts(type)[id] || null;
+    const seedRecord = getSourceMap(type)[id] || null;
+    let remoteRecord = null;
 
     if (hasRemote) {
       try {
@@ -99,14 +122,18 @@
           : `/api/ingredients/${encodeURIComponent(id)}`;
         const data = unwrapResponse(await request(path));
         if (data) {
-          return model.normalize(type, data);
+          remoteRecord = model.normalize(type, data);
         }
       } catch {
-        // fall back to local data
+        // fall back to draft / seed data
       }
     }
 
-    return model.normalize(type, localRecord);
+    return pickLatestContent([
+      draft ? model.normalize(type, draft) : null,
+      remoteRecord,
+      seedRecord ? model.normalize(type, seedRecord) : null,
+    ]);
   }
 
   async function saveContent(type, id, payload) {
@@ -117,6 +144,8 @@
       updatedAt: model.now(),
     });
 
+    lastSaveTarget = 'local';
+
     if (hasRemote) {
       try {
         const path = type === 'recipe'
@@ -126,6 +155,7 @@
           method: 'PATCH',
           body: JSON.stringify(normalized),
         }));
+        lastSaveTarget = 'remote';
         return model.normalize(type, data || normalized);
       } catch {
         // fall through to local draft persistence
@@ -217,6 +247,7 @@
   window.contentApi = {
     loadContent,
     saveContent,
+    getLastSaveTarget,
     isRemoteConfigured,
     getEditLink,
     getModeLabel,
