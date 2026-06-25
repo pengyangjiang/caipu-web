@@ -114,8 +114,19 @@ function getToken(request) {
   return request.headers.get('X-Admin-Token') || '';
 }
 
+function getAdminConfig(env) {
+  const adminPassword = String(env.ADMIN_PASSWORD || '').trim();
+  const adminToken = String(env.ADMIN_TOKEN || '').trim();
+  return {
+    adminPassword,
+    adminToken,
+    configured: Boolean(adminPassword && adminToken),
+  };
+}
+
 function isAdmin(request, env) {
-  const adminToken = env.ADMIN_TOKEN || 'demo-admin-token';
+  const { adminToken, configured } = getAdminConfig(env);
+  if (!configured) return false;
   return getToken(request) === adminToken;
 }
 
@@ -272,8 +283,7 @@ export async function onRequest(context) {
   }
 
   const route = getRoutePath(params);
-  const adminPassword = env.ADMIN_PASSWORD || 'admin123';
-  const adminToken = env.ADMIN_TOKEN || 'demo-admin-token';
+  const adminConfig = getAdminConfig(env);
 
   try {
     if (route === 'health' && request.method === 'GET') {
@@ -281,17 +291,26 @@ export async function onRequest(context) {
         status: 'ok',
         service: 'recipe-admin-backend',
         time: new Date().toISOString(),
+        adminConfigured: adminConfig.configured,
       });
     }
 
     if (route === 'me' && request.method === 'GET') {
       return ok({
         isAdmin: isAdmin(request, env),
-        tokenConfigured: Boolean(adminToken),
+        tokenConfigured: adminConfig.configured,
       });
     }
 
     if (route === 'admin/login' && request.method === 'POST') {
+      if (!adminConfig.configured) {
+        return fail(
+          'SERVICE_MISCONFIGURED',
+          '管理员凭据未配置，请在 Cloudflare 环境变量中设置 ADMIN_PASSWORD 和 ADMIN_TOKEN',
+          503,
+        );
+      }
+
       let payload;
       try {
         payload = await request.json();
@@ -300,12 +319,12 @@ export async function onRequest(context) {
       }
 
       const password = String(payload?.password || '');
-      if (password !== adminPassword) {
+      if (password !== adminConfig.adminPassword) {
         return fail('FORBIDDEN', 'Password incorrect', 403);
       }
 
       return ok({
-        token: adminToken,
+        token: adminConfig.adminToken,
         user: {
           id: 'admin',
           name: '管理员',
