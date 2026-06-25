@@ -42,9 +42,11 @@
       note: '',
       ...(normalized.calories || {}),
     };
-    if (!normalized.nutritionProfile && window.nutritionProfileBuilder?.buildNutritionProfile) {
-      const profile = window.nutritionProfileBuilder.buildNutritionProfile(normalized);
-      if (profile) normalized.nutritionProfile = profile;
+    if (normalized.nutritionProfile?.source !== 'manual' && window.nutritionProfileBuilder?.ensureNutritionProfile) {
+      return window.nutritionProfileBuilder.ensureNutritionProfile(normalized, {
+        ingredientDetails: window.ingredientDetails,
+        catalogIngredients: window.recipeCatalog?.ingredients,
+      });
     }
     return normalized;
   }

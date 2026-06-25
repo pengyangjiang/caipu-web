@@ -1,5 +1,5 @@
 import { startRecipeGeneration, pollRecipeGeneration } from '../../shared/cursor-recipe.mjs';
-import { buildNutritionProfile } from '../../shared/nutrition-profile.js';
+import { ensureNutritionProfile } from '../../shared/nutrition-profile.js';
 import {
   getClientIpFromRequest,
   checkLoginRateLimit,
@@ -43,7 +43,7 @@ function clone(value) {
   return value == null ? value : JSON.parse(JSON.stringify(value));
 }
 
-function normalizeRecipe(record) {
+function normalizeRecipe(record, ingredientSource) {
   if (!record) return null;
   const normalized = clone(record);
   normalized.version = Number(normalized.version || 1);
@@ -69,11 +69,12 @@ function normalizeRecipe(record) {
     note: '',
     ...(normalized.calories || {}),
   };
-  if (!normalized.nutritionProfile) {
-    const profile = buildNutritionProfile(normalized);
-    if (profile) normalized.nutritionProfile = profile;
+  if (normalized.nutritionProfile?.source === 'manual') {
+    return normalized;
   }
-  return normalized;
+  return ensureNutritionProfile(normalized, {
+    ingredientDetails: ingredientSource,
+  }) || normalized;
 }
 
 function normalizeIngredient(record) {
@@ -205,7 +206,7 @@ function updateVersion(current, incoming) {
   }
 }
 
-function mergeRecipe(current, patch) {
+function mergeRecipe(current, patch, ingredientSource) {
   const next = normalizeRecipe({
     ...current,
     ...clone(patch),
@@ -213,7 +214,7 @@ function mergeRecipe(current, patch) {
     version: Number(current.version || 1) + 1,
     updatedAt: new Date().toISOString(),
     createdAt: current.createdAt,
-  });
+  }, ingredientSource);
   next.ingredientNames = Array.isArray(next.ingredientNames)
     ? next.ingredientNames
     : next.ingredients.flatMap((group) => (group.items || []).map((item) => item.name));
@@ -264,7 +265,7 @@ async function handleCreateRecipe(request, env) {
     version: 1,
     updatedAt: new Date().toISOString(),
     createdAt: new Date().toISOString(),
-  });
+  }, store.ingredients);
   next.ingredientNames = Array.isArray(next.ingredientNames)
     ? next.ingredientNames
     : next.ingredients.flatMap((group) => (group.items || []).map((item) => item.name));
@@ -286,7 +287,9 @@ async function handleCreateRecipe(request, env) {
 async function handleDetail(request, env, type, id) {
   const store = await loadStore(request, env);
   const map = type === 'recipe' ? store.recipes : store.ingredients;
-  const normalize = type === 'recipe' ? normalizeRecipe : normalizeIngredient;
+  const normalize = type === 'recipe'
+    ? (record) => normalizeRecipe(record, store.ingredients)
+    : normalizeIngredient;
 
   if (request.method === 'GET') {
     const record = map[id] ? normalize(map[id]) : null;
@@ -320,7 +323,7 @@ async function handleDetail(request, env, type, id) {
     try {
       updateVersion(current, payload);
       const next = type === 'recipe'
-        ? mergeRecipe(current, payload)
+        ? mergeRecipe(current, payload, store.ingredients)
         : mergeIngredient(current, payload);
       map[id] = next;
       await persistStore(env, store.recipes, store.ingredients);
@@ -524,7 +527,7 @@ export async function onRequest(context) {
 
     if (route === 'search-index' && request.method === 'GET') {
       const store = await loadStore(request, env);
-      const recipes = Object.values(store.recipes).map((item) => pickRecipeSummary(normalizeRecipe(item)));
+      const recipes = Object.values(store.recipes).map((item) => pickRecipeSummary(normalizeRecipe(item, store.ingredients)));
       const ingredients = Object.values(store.ingredients).map((item) => pickIngredientSummary(normalizeIngredient(item)));
       return ok({
         categories: [
@@ -556,7 +559,7 @@ export async function onRequest(context) {
 
     if (route === 'recipes' && request.method === 'GET') {
       const store = await loadStore(request, env);
-      const recipes = Object.values(store.recipes).map((item) => pickRecipeSummary(normalizeRecipe(item)));
+      const recipes = Object.values(store.recipes).map((item) => pickRecipeSummary(normalizeRecipe(item, store.ingredients)));
       return ok(recipes);
     }
 

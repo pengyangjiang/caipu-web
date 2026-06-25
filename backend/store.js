@@ -1,7 +1,7 @@
 const fs = require('node:fs');
 const path = require('node:path');
 const { loadBrowserExport } = require('../scripts/load-browser-export');
-const { buildNutritionProfile } = require('../shared/nutrition-profile');
+const { ensureNutritionProfile } = require('../shared/nutrition-profile');
 
 const ROOT = path.join(__dirname, '..');
 const STORAGE_DIR = path.join(__dirname, 'storage');
@@ -10,6 +10,11 @@ const INGREDIENTS_FILE = path.join(STORAGE_DIR, 'ingredients.json');
 const DATA_FILE = path.join(ROOT, 'data.js');
 const RECIPE_DETAILS_FILE = path.join(ROOT, 'recipe-details.js');
 const INGREDIENT_DETAILS_FILE = path.join(ROOT, 'ingredient-details.js');
+
+const nutritionOptions = {
+  ingredientDetails: loadBrowserExport(INGREDIENT_DETAILS_FILE, 'ingredientDetails') || {},
+  catalogIngredients: loadBrowserExport(DATA_FILE, 'recipeCatalog')?.ingredients || [],
+};
 
 function ensureDir(dirPath) {
   if (!fs.existsSync(dirPath)) {
@@ -61,11 +66,10 @@ function normalizeRecipe(record) {
     note: '',
     ...(normalized.calories || {}),
   };
-  if (!normalized.nutritionProfile) {
-    const profile = buildNutritionProfile(normalized);
-    if (profile) normalized.nutritionProfile = profile;
+  if (normalized.nutritionProfile?.source === 'manual') {
+    return normalized;
   }
-  return normalized;
+  return ensureNutritionProfile(normalized, nutritionOptions) || normalized;
 }
 
 function normalizeIngredient(record) {

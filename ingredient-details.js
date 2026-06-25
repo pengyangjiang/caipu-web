@@ -566,5 +566,57 @@ window.ingredientDetails = {
     "cookingNotes": [
       "适合粥、咖啡、甜品"
     ]
+  },
+  "pork-belly": {
+    "id": "pork-belly",
+    "name": "五花肉",
+    "aliases": [
+      "五花肉",
+      "三层肉"
+    ],
+    "category": "蛋白质",
+    "unit": "100g",
+    "caloriesPer100g": 386,
+    "nutritionPer100g": {
+      "protein": 9.3,
+      "fat": 35,
+      "carbs": 0,
+      "fiber": 0
+    },
+    "handlingTips": [
+      "切块后焯水可去腥并减少多余油脂。",
+      "长时间炖煮更适合释放胶质和风味。"
+    ],
+    "storageTips": [
+      "冷藏 1-2 天内使用，长期建议分装冷冻。"
+    ],
+    "cookingNotes": [
+      "适合红烧、炖煮、焖制"
+    ]
+  },
+  "rock-sugar": {
+    "id": "rock-sugar",
+    "name": "冰糖",
+    "aliases": [
+      "冰糖"
+    ],
+    "category": "调味料",
+    "unit": "100g",
+    "caloriesPer100g": 397,
+    "nutritionPer100g": {
+      "protein": 0,
+      "fat": 0,
+      "carbs": 99,
+      "fiber": 0
+    },
+    "handlingTips": [
+      "小块冰糖更容易融化。"
+    ],
+    "storageTips": [
+      "密封防潮保存。"
+    ],
+    "cookingNotes": [
+      "适合红烧、炖甜汤"
+    ]
   }
 };

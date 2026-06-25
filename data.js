@@ -602,6 +602,39 @@ window.recipeCatalog = {
         "carbs": 5,
         "fiber": 0
       }
+    },
+    {
+      "id": "pork-belly",
+      "name": "五花肉",
+      "aliases": [
+        "五花肉",
+        "三层肉"
+      ],
+      "category": "蛋白质",
+      "unit": "100g",
+      "caloriesPer100g": 386,
+      "nutritionPer100g": {
+        "protein": 9.3,
+        "fat": 35,
+        "carbs": 0,
+        "fiber": 0
+      }
+    },
+    {
+      "id": "rock-sugar",
+      "name": "冰糖",
+      "aliases": [
+        "冰糖"
+      ],
+      "category": "调味料",
+      "unit": "100g",
+      "caloriesPer100g": 397,
+      "nutritionPer100g": {
+        "protein": 0,
+        "fat": 0,
+        "carbs": 99,
+        "fiber": 0
+      }
     }
   ]
 };

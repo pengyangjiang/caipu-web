@@ -22,9 +22,11 @@ let pendingDeleteRecipe = null;
 
 function getRecipeWithNutritionProfile(recipe) {
   if (!recipe) return recipe;
-  if (recipe.nutritionProfile) return recipe;
   if (window.nutritionProfileBuilder?.ensureNutritionProfile) {
-    return window.nutritionProfileBuilder.ensureNutritionProfile(recipe);
+    return window.nutritionProfileBuilder.ensureNutritionProfile(recipe, {
+      ingredientDetails: window.ingredientDetails,
+      catalogIngredients: window.recipeCatalog?.ingredients,
+    });
   }
   return recipe;
 }

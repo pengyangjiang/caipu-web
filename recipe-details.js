@@ -164,6 +164,7 @@ window.recipeDetails = {
       }
     ],
     "nutritionProfile": {
+      "source": "manual",
       "servingWeightG": 320,
       "dailyReference": {
         "calories": 2000,
@@ -341,6 +342,7 @@ window.recipeDetails = {
       }
     ],
     "nutritionProfile": {
+      "source": "manual",
       "servingWeightG": 410,
       "dailyReference": {
         "calories": 2000,
@@ -513,6 +515,7 @@ window.recipeDetails = {
       }
     ],
     "nutritionProfile": {
+      "source": "manual",
       "servingWeightG": 300,
       "dailyReference": {
         "calories": 2000,
@@ -663,6 +666,7 @@ window.recipeDetails = {
       }
     ],
     "nutritionProfile": {
+      "source": "manual",
       "servingWeightG": 260,
       "dailyReference": {
         "calories": 2000,

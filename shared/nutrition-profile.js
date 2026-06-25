@@ -6,8 +6,20 @@ const DAILY_REFERENCE = {
   fiber: 25,
 };
 
+const PROFILE_VERSION = 2;
+
+const GRADE_RANK = {
+  绿灯: 0,
+  黄灯: 1,
+  红灯: 2,
+};
+
 function round1(value) {
   return Number(Number(value || 0).toFixed(1));
+}
+
+function normalizeIngredientName(value) {
+  return String(value || '').toLowerCase().replace(/\s+/g, '').trim();
 }
 
 function parseNutrientNumber(value) {
@@ -15,26 +27,55 @@ function parseNutrientNumber(value) {
   return match ? Number(match[0]) : 0;
 }
 
-function getNutrientValues(recipe) {
-  const summaryMap = new Map((recipe.summary || []).map((item) => [item.label, item.value]));
-  const nutritionMap = {};
-  for (const item of recipe.nutrition || []) {
-    nutritionMap[item.label] = parseNutrientNumber(item.value);
-  }
-
-  const calories = Number(recipe.calories?.perServing || 0)
-    || parseNutrientNumber(summaryMap.get('热量'));
-
-  return {
-    calories,
-    protein: nutritionMap['蛋白质'] || parseNutrientNumber(summaryMap.get('蛋白质')),
-    fat: nutritionMap['脂肪'] || parseNutrientNumber(summaryMap.get('脂肪')),
-    carbs: nutritionMap['碳水'] || parseNutrientNumber(summaryMap.get('碳水')),
-    fiber: nutritionMap['膳食纤维'] || parseNutrientNumber(summaryMap.get('膳食纤维')),
-  };
+function maxGrade(current, next) {
+  return GRADE_RANK[next] > GRADE_RANK[current] ? next : current;
 }
 
-function parseAmountToGrams(amount) {
+function createIngredientLookup(options = {}) {
+  const lookup = new Map();
+  const add = (name, detail) => {
+    if (!name || !detail) return;
+    lookup.set(normalizeIngredientName(name), detail);
+  };
+
+  const details = options.ingredientDetails || (
+    typeof window !== 'undefined' ? window.ingredientDetails : null
+  );
+  if (details && typeof details === 'object') {
+    for (const detail of Object.values(details)) {
+      add(detail.name, detail);
+      (detail.aliases || []).forEach((alias) => add(alias, detail));
+    }
+  }
+
+  const catalog = options.catalogIngredients || (
+    typeof window !== 'undefined' ? window.recipeCatalog?.ingredients : null
+  );
+  if (Array.isArray(catalog)) {
+    for (const item of catalog) {
+      const detail = details?.[item.id] || item;
+      add(item.name, detail);
+      (item.aliases || []).forEach((alias) => add(alias, detail));
+    }
+  }
+
+  return lookup;
+}
+
+function isExcludedBulkLiquid(name, amount) {
+  const nameText = String(name || '').trim();
+  const amountText = String(amount || '').trim();
+  const grams = parseAmountToGrams(amount, { allowLiquids: true });
+
+  if (/^(水|清水|热水|冷水|温水|开水|饮用水)$/.test(nameText)) return true;
+  if (/(高汤| stock|broth|汤底)/i.test(nameText) && grams >= 80) return true;
+  if (/^(水|汤)/.test(nameText) && grams >= 150) return true;
+  if (/水/.test(nameText) && /(?:ml|mL|毫升|升|L)/.test(amountText) && grams >= 80) return true;
+
+  return false;
+}
+
+function parseAmountToGrams(amount, options = {}) {
   const text = String(amount || '').trim();
   if (!text) return 0;
 
@@ -45,7 +86,9 @@ function parseAmountToGrams(amount) {
   if (kgMatch) return Number(kgMatch[1]) * 1000;
 
   const mlMatch = text.match(/([\d.]+)\s*(?:ml|mL|毫升)/i);
-  if (mlMatch) return Number(mlMatch[1]);
+  if (mlMatch) {
+    return options.allowLiquids ? Number(mlMatch[1]) : Number(mlMatch[1]);
+  }
 
   const liangMatch = text.match(/([\d.]+)\s*两/);
   if (liangMatch) return Number(liangMatch[1]) * 50;
@@ -71,16 +114,96 @@ function parseAmountToGrams(amount) {
   return 0;
 }
 
-function estimateServingWeightG(recipe, calories) {
-  let total = 0;
+function getNutrientValues(recipe) {
+  const summaryMap = new Map((recipe.summary || []).map((item) => [item.label, item.value]));
+  const nutritionMap = {};
+  for (const item of recipe.nutrition || []) {
+    nutritionMap[item.label] = parseNutrientNumber(item.value);
+  }
+
+  const calories = Number(recipe.calories?.perServing || 0)
+    || parseNutrientNumber(summaryMap.get('热量'));
+
+  return {
+    calories,
+    protein: nutritionMap['蛋白质'] || parseNutrientNumber(summaryMap.get('蛋白质')),
+    fat: nutritionMap['脂肪'] || parseNutrientNumber(summaryMap.get('脂肪')),
+    carbs: nutritionMap['碳水'] || parseNutrientNumber(summaryMap.get('碳水')),
+    fiber: nutritionMap['膳食纤维'] || parseNutrientNumber(summaryMap.get('膳食纤维')),
+  };
+}
+
+function estimateNutrientsFromIngredients(recipe, lookup) {
+  if (!lookup || lookup.size === 0) return null;
+
+  let matchedWeight = 0;
+  let solidWeight = 0;
+  let calories = 0;
+  let protein = 0;
+  let fat = 0;
+  let carbs = 0;
+  let fiber = 0;
+
   for (const group of recipe.ingredients || []) {
     for (const item of group.items || []) {
-      total += parseAmountToGrams(item.amount);
+      if (isExcludedBulkLiquid(item.name, item.amount)) continue;
+
+      const grams = parseAmountToGrams(item.amount);
+      if (grams <= 0) continue;
+      solidWeight += grams;
+
+      const detail = lookup.get(normalizeIngredientName(item.name));
+      if (!detail) continue;
+
+      matchedWeight += grams;
+      const factor = grams / 100;
+      calories += Number(detail.caloriesPer100g || 0) * factor;
+      protein += Number(detail.nutritionPer100g?.protein || 0) * factor;
+      fat += Number(detail.nutritionPer100g?.fat || 0) * factor;
+      carbs += Number(detail.nutritionPer100g?.carbs || 0) * factor;
+      fiber += Number(detail.nutritionPer100g?.fiber || 0) * factor;
     }
   }
 
-  if (total >= 120) {
-    return Math.round(total);
+  if (solidWeight < 60 || matchedWeight < solidWeight * 0.35) {
+    return null;
+  }
+
+  return {
+    calories: round1(calories),
+    protein: round1(protein),
+    fat: round1(fat),
+    carbs: round1(carbs),
+    fiber: round1(fiber),
+    matchedWeight: round1(matchedWeight),
+    solidWeight: round1(solidWeight),
+  };
+}
+
+function mergeNutrientValues(stated, estimated) {
+  if (!estimated) return stated;
+
+  return {
+    calories: Math.max(stated.calories || 0, estimated.calories || 0),
+    protein: estimated.protein || stated.protein || 0,
+    fat: Math.max(stated.fat || 0, estimated.fat || 0),
+    carbs: estimated.carbs || stated.carbs || 0,
+    fiber: estimated.fiber || stated.fiber || 0,
+  };
+}
+
+function estimateServingWeightG(recipe, calories) {
+  let solidTotal = 0;
+
+  for (const group of recipe.ingredients || []) {
+    for (const item of group.items || []) {
+      if (isExcludedBulkLiquid(item.name, item.amount)) continue;
+      solidTotal += parseAmountToGrams(item.amount);
+    }
+  }
+
+  if (solidTotal >= 80) {
+    return Math.round(solidTotal);
   }
 
   if (calories >= 480) return 380;
@@ -90,37 +213,102 @@ function estimateServingWeightG(recipe, calories) {
   return 220;
 }
 
-function getFoodGrade(per100gCalories) {
-  if (per100gCalories <= 120) {
+function getFoodGrade(per100gCalories, context = {}) {
+  const {
+    perServingCalories = 0,
+    fatSharePercent = 0,
+    energySharePercent = 0,
+  } = context;
+
+  let grade = '绿灯';
+  if (per100gCalories > 200) grade = '红灯';
+  else if (per100gCalories > 120) grade = '黄灯';
+
+  if (perServingCalories >= 650 || fatSharePercent >= 85 || energySharePercent >= 40) {
+    grade = maxGrade(grade, '红灯');
+  } else if (perServingCalories >= 450 || fatSharePercent >= 55 || energySharePercent >= 30) {
+    grade = maxGrade(grade, '黄灯');
+  }
+
+  if (grade === '红灯') {
+    if (fatSharePercent >= 70) {
+      return {
+        level: '红灯',
+        tone: '高脂正餐',
+        note: '每份脂肪和总热量偏高，建议小份食用并搭配蔬菜。',
+      };
+    }
     return {
-      level: '绿灯',
-      tone: '轻负担',
-      note: '每100g热量较低，适合日常和轻食场景。',
+      level: '红灯',
+      tone: '高热量',
+      note: '每100g或每份热量偏高，更适合作为正餐并控制其他高热量搭配。',
     };
   }
 
-  if (per100gCalories <= 200) {
+  if (grade === '黄灯') {
+    if (fatSharePercent >= 50) {
+      return {
+        level: '黄灯',
+        tone: '注意份量',
+        note: '脂肪占比不低，建议搭配蔬菜并控制食用份量。',
+      };
+    }
     return {
       level: '黄灯',
       tone: '注意份量',
-      note: '热量和脂肪中等，建议搭配蔬菜并控制份量。',
+      note: '热量中等，适合作为正餐并注意当日总摄入。',
     };
   }
 
   return {
-    level: '红灯',
-    tone: '高热量',
-    note: '每100g热量偏高，更适合作为正餐并减少其他高热量搭配。',
+    level: '绿灯',
+    tone: '轻负担',
+    note: '每100g热量较低，适合日常和轻食场景。',
   };
 }
 
-function buildNutritionProfile(recipe) {
+function upsertSummaryRow(summary, label, value) {
+  const rows = Array.isArray(summary) ? [...summary] : [];
+  const index = rows.findIndex((item) => item.label === label);
+  if (index >= 0) {
+    rows[index] = { ...rows[index], value };
+    return rows;
+  }
+  return [...rows, { label, value }];
+}
+
+function applyComputedNutrients(recipe, nutrients, estimated) {
+  if (!nutrients?.calories || !estimated) return recipe;
+
+  const next = { ...recipe };
+  next.calories = {
+    ...(next.calories || {}),
+    perServing: nutrients.calories,
+    total: nutrients.calories,
+  };
+  next.summary = upsertSummaryRow(next.summary, '热量', `${nutrients.calories} kcal`);
+  next.summary = upsertSummaryRow(next.summary, '蛋白质', `${nutrients.protein}g`);
+  next.summary = upsertSummaryRow(next.summary, '脂肪', `${nutrients.fat}g`);
+  next.summary = upsertSummaryRow(next.summary, '碳水', `${nutrients.carbs}g`);
+  if (nutrients.fiber) {
+    next.summary = upsertSummaryRow(next.summary, '膳食纤维', `${nutrients.fiber}g`);
+  }
+  return next;
+}
+
+function buildNutritionProfile(recipe, options = {}) {
   if (!recipe || typeof recipe !== 'object') return null;
-  if (recipe.nutritionProfile && typeof recipe.nutritionProfile === 'object') {
-    return recipe.nutritionProfile;
+
+  const existing = recipe.nutritionProfile;
+  if (existing?.source === 'manual') {
+    return existing;
   }
 
-  const nutrients = getNutrientValues(recipe);
+  const lookup = createIngredientLookup(options);
+  const stated = getNutrientValues(recipe);
+  const estimated = estimateNutrientsFromIngredients(recipe, lookup);
+  const nutrients = mergeNutrientValues(stated, estimated);
+
   if (!nutrients.calories) {
     return null;
   }
@@ -143,28 +331,46 @@ function buildNutritionProfile(recipe) {
     fiber: round1((nutrients.fiber / DAILY_REFERENCE.fiber) * 100),
   };
 
+  const energySharePercent = round1((nutrients.calories / DAILY_REFERENCE.calories) * 100);
+
   return {
+    source: 'computed',
+    version: PROFILE_VERSION,
     servingWeightG,
+    excludesCookingLiquid: true,
+    ingredientMatchWeightG: estimated?.matchedWeight || 0,
     dailyReference: { ...DAILY_REFERENCE },
     per100g,
-    energySharePercent: round1((nutrients.calories / DAILY_REFERENCE.calories) * 100),
+    energySharePercent,
     nutrientSharePercent,
-    foodGrade: getFoodGrade(per100g.calories),
+    foodGrade: getFoodGrade(per100g.calories, {
+      perServingCalories: nutrients.calories,
+      fatSharePercent: nutrientSharePercent.fat,
+      energySharePercent,
+    }),
   };
 }
 
-function ensureNutritionProfile(recipe) {
+function ensureNutritionProfile(recipe, options = {}) {
   if (!recipe || typeof recipe !== 'object') return recipe;
-  if (recipe.nutritionProfile) return recipe;
-  const profile = buildNutritionProfile(recipe);
+  if (recipe.nutritionProfile?.source === 'manual') return recipe;
+
+  const lookup = createIngredientLookup(options);
+  const stated = getNutrientValues(recipe);
+  const estimated = estimateNutrientsFromIngredients(recipe, lookup);
+  const nutrients = mergeNutrientValues(stated, estimated);
+  const enrichedRecipe = applyComputedNutrients(recipe, nutrients, estimated);
+  const profile = buildNutritionProfile(enrichedRecipe, options);
   if (!profile) return recipe;
-  return { ...recipe, nutritionProfile: profile };
+  return { ...enrichedRecipe, nutritionProfile: profile };
 }
 
 if (typeof module !== 'undefined') {
   module.exports = {
     buildNutritionProfile,
     ensureNutritionProfile,
+    createIngredientLookup,
+    PROFILE_VERSION,
   };
 }
 
@@ -172,5 +378,7 @@ if (typeof window !== 'undefined') {
   window.nutritionProfileBuilder = {
     buildNutritionProfile,
     ensureNutritionProfile,
+    createIngredientLookup,
+    PROFILE_VERSION,
   };
 }
