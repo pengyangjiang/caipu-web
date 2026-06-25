@@ -20,6 +20,15 @@ const SHOPPING_LIST_KEY = "recipe-shopping-list";
 let currentRenderedRecipe = null;
 let pendingDeleteRecipe = null;
 
+function getRecipeWithNutritionProfile(recipe) {
+  if (!recipe) return recipe;
+  if (recipe.nutritionProfile) return recipe;
+  if (window.nutritionProfileBuilder?.ensureNutritionProfile) {
+    return window.nutritionProfileBuilder.ensureNutritionProfile(recipe);
+  }
+  return recipe;
+}
+
 function renderEmpty(message) {
   return `<div class="empty-state">${message}</div>`;
 }
@@ -692,6 +701,7 @@ function renderRecipeDetail(recipe) {
     return;
   }
 
+  recipe = getRecipeWithNutritionProfile(recipe);
   currentRenderedRecipe = recipe;
   document.title = `${recipe.name} - 菜谱详情`;
   recipeBreadcrumb.textContent = recipe.name;

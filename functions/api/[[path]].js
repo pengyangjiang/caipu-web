@@ -1,4 +1,5 @@
 import { startRecipeGeneration, pollRecipeGeneration } from '../../shared/cursor-recipe.mjs';
+import { buildNutritionProfile } from '../../shared/nutrition-profile.js';
 import {
   getClientIpFromRequest,
   checkLoginRateLimit,
@@ -68,6 +69,10 @@ function normalizeRecipe(record) {
     note: '',
     ...(normalized.calories || {}),
   };
+  if (!normalized.nutritionProfile) {
+    const profile = buildNutritionProfile(normalized);
+    if (profile) normalized.nutritionProfile = profile;
+  }
   return normalized;
 }
 

@@ -1,6 +1,7 @@
 const fs = require('node:fs');
 const path = require('node:path');
 const { loadBrowserExport } = require('../scripts/load-browser-export');
+const { buildNutritionProfile } = require('../shared/nutrition-profile');
 
 const ROOT = path.join(__dirname, '..');
 const STORAGE_DIR = path.join(__dirname, 'storage');
@@ -60,6 +61,10 @@ function normalizeRecipe(record) {
     note: '',
     ...(normalized.calories || {}),
   };
+  if (!normalized.nutritionProfile) {
+    const profile = buildNutritionProfile(normalized);
+    if (profile) normalized.nutritionProfile = profile;
+  }
   return normalized;
 }
 

@@ -1,4 +1,4 @@
-﻿(function () {
+(function () {
   const DEFAULT_VERSION = 1;
 
   function clone(value) {
@@ -42,6 +42,10 @@
       note: '',
       ...(normalized.calories || {}),
     };
+    if (!normalized.nutritionProfile && window.nutritionProfileBuilder?.buildNutritionProfile) {
+      const profile = window.nutritionProfileBuilder.buildNutritionProfile(normalized);
+      if (profile) normalized.nutritionProfile = profile;
+    }
     return normalized;
   }
 
