@@ -256,6 +256,14 @@ async function handleDetail(request, env, type, id) {
   return new Response('Method Not Allowed', { status: 405, headers: CORS_HEADERS });
 }
 
+function getRoutePath(params) {
+  const raw = params?.path;
+  if (Array.isArray(raw)) {
+    return raw.join('/');
+  }
+  return String(raw || '').replace(/^\/+|\/+$/g, '');
+}
+
 export async function onRequest(context) {
   const { request, env, params } = context;
 
@@ -263,7 +271,7 @@ export async function onRequest(context) {
     return new Response(null, { status: 204, headers: CORS_HEADERS });
   }
 
-  const route = String(params.path || '').replace(/^\/+|\/+$/g, '');
+  const route = getRoutePath(params);
   const adminPassword = env.ADMIN_PASSWORD || 'admin123';
   const adminToken = env.ADMIN_TOKEN || 'demo-admin-token';
 
