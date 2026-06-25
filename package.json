@@ -1,0 +1,9 @@
+{
+  "name": "caipu-web",
+  "private": true,
+  "scripts": {
+    "sync": "node scripts/sync-storage.js",
+    "start": "node backend/server.js",
+    "prestart": "node scripts/sync-storage.js"
+  }
+}

@@ -1,6 +1,6 @@
 const fs = require('node:fs');
 const path = require('node:path');
-const vm = require('node:vm');
+const { loadBrowserExport } = require('../scripts/load-browser-export');
 
 const ROOT = path.join(__dirname, '..');
 const STORAGE_DIR = path.join(__dirname, 'storage');
@@ -22,17 +22,6 @@ function readJson(filePath) {
 
 function writeJson(filePath, value) {
   fs.writeFileSync(filePath, `${JSON.stringify(value, null, 2)}\n`, 'utf8');
-}
-
-function loadBrowserExport(filePath, exportName) {
-  const source = fs.readFileSync(filePath, 'utf8');
-  const sandbox = {
-    window: {},
-    console,
-    structuredClone: global.structuredClone,
-  };
-  vm.runInNewContext(source, sandbox, { filename: filePath });
-  return sandbox.window[exportName];
 }
 
 function clone(value) {

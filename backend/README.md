@@ -34,8 +34,39 @@ node backend/server.js
 
 ## 说明
 
-- 首次启动会自动读取当前前端的 `data.js`、`recipe-details.js`、`ingredient-details.js` 作为种子数据。
-- 更新会落到 `backend/storage/recipes.json` 和 `backend/storage/ingredients.json`。
+### 内容数据源（请只改 JS 源文件）
+
+人工维护的菜谱 / 食材详情源文件：
+
+- `recipe-details.js` → `window.recipeDetails`
+- `ingredient-details.js` → `window.ingredientDetails`
+
+`backend/storage/recipes.json` 和 `ingredients.json` 由构建脚本自动生成，**不要手改**。
+
+```bash
+# 改完 recipe-details.js / ingredient-details.js 后执行
+node scripts/sync-storage.js
+
+# 或
+npm run sync
+```
+
+本地启动前也会自动同步（`npm start` 会跑 `prestart`）。
+
+### 三层数据别混淆
+
+| 位置 | 作用 |
+|------|------|
+| `recipe-details.js` | Git 里的源码，改内容改这里 |
+| `backend/storage/*.json` | 由脚本生成，给本地 API 和 Cloudflare 静态种子用 |
+| Cloudflare KV | 线上后台编辑后的活数据，不会回写 Git |
+
+本地 `PATCH` 保存会更新 `backend/storage/*.json`，不会改 `recipe-details.js`。若要把本地编辑并回源码，需手动同步或以后做导出功能。
+
+### 后端行为
+
+- 启动时读取 `backend/storage/recipes.json`（不存在时回退 `recipe-details.js`）。
+- 管理员 `PATCH` 保存会写入 `backend/storage/`。
 - `PATCH` 默认要求管理员令牌，通过 `Authorization: Bearer <token>` 或 `X-Admin-Token` 传递。
 
 ## Cloudflare Pages 部署
@@ -50,6 +81,7 @@ node backend/server.js
    - 未绑定 KV 时，登录和读取正常，但 `PATCH` 保存会返回 503。
 4. 线上环境会自动使用当前域名作为 API 地址（见 `config.js`），无需再指向 `localhost:3000`。
 5. 线上 API **不再使用** `admin123` / `demo-admin-token` 等默认凭据；未配置环境变量时登录会返回 503。
+6. **（推荐）** 在 Pages → Settings → Builds 里设置 Build command：`node scripts/sync-storage.js`，确保部署前 JSON 与 JS 源文件一致。
 
 ### 安全说明
 
