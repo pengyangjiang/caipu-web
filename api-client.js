@@ -1,6 +1,11 @@
 (function () {
   const model = window.contentModel;
-  const remoteBase = (window.__API_BASE_URL__ || window.API_BASE_URL || 'http://localhost:3000').trim();
+  const remoteBase = (
+    window.APP_CONFIG?.apiBaseUrl
+    || window.__API_BASE_URL__
+    || window.API_BASE_URL
+    || 'http://localhost:3000'
+  ).trim();
   const hasRemote = Boolean(remoteBase);
   const storageKeys = {
     recipe: 'recipe-content-drafts',

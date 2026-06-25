@@ -1,4 +1,9 @@
-const API_BASE_URL = (window.__API_BASE_URL__ || window.API_BASE_URL || 'http://localhost:3000').trim();
+const API_BASE_URL = (
+  window.APP_CONFIG?.apiBaseUrl
+  || window.__API_BASE_URL__
+  || window.API_BASE_URL
+  || 'http://localhost:3000'
+).trim();
 
 const form = document.getElementById('loginForm');
 const passwordInput = document.getElementById('passwordInput');

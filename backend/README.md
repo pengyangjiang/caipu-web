@@ -37,3 +37,15 @@ node backend/server.js
 - 首次启动会自动读取当前前端的 `data.js`、`recipe-details.js`、`ingredient-details.js` 作为种子数据。
 - 更新会落到 `backend/storage/recipes.json` 和 `backend/storage/ingredients.json`。
 - `PATCH` 默认要求管理员令牌，通过 `Authorization: Bearer <token>` 或 `X-Admin-Token` 传递。
+
+## Cloudflare Pages 部署
+
+前端部署到 Cloudflare Pages 时，请确保仓库根目录包含 `functions/` 文件夹（已提供 `functions/api/[[path]].js`）。
+
+1. 重新部署项目，使 Pages Functions 生效。
+2. 在 Cloudflare 控制台 → Pages 项目 → Settings → Environment variables 中设置：
+   - `ADMIN_PASSWORD`：管理员密码（不要用默认 `admin123`）
+   - `ADMIN_TOKEN`：登录后返回的令牌（不要用默认 `demo-admin-token`）
+3. 若需要在线保存编辑内容，在 Functions → KV namespace bindings 中绑定 `CONTENT_KV`。
+   - 未绑定 KV 时，登录和读取正常，但 `PATCH` 保存会返回 503。
+4. 线上环境会自动使用当前域名作为 API 地址（见 `config.js`），无需再指向 `localhost:3000`。
