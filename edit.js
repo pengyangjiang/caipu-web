@@ -6,13 +6,16 @@ if (!api || !catalog) {
 }
 
 const editBreadcrumb = document.getElementById("editBreadcrumb");
-const editHeaderActions = document.getElementById("editHeaderActions");
 const editTitle = document.getElementById("editTitle");
 const editDesc = document.getElementById("editDesc");
 const editStatus = document.getElementById("editStatus");
 const editModeHint = document.getElementById("editModeHint");
 const editNotice = document.getElementById("editNotice");
 const editForm = document.getElementById("editForm");
+const editStickyBar = document.getElementById("editStickyBar");
+const editStickyBack = document.getElementById("editStickyBack");
+const editStickyStatus = document.getElementById("editStickyStatus");
+const editStickySave = document.getElementById("editStickySave");
 
 const state = {
   type: getParam("type") || "recipe",
@@ -48,6 +51,9 @@ function escapeAttr(value) {
 function setDirty(nextDirty = true) {
   state.dirty = nextDirty;
   editStatus.textContent = nextDirty ? "有未保存的修改" : "已保存";
+  if (editStickyStatus) {
+    editStickyStatus.textContent = nextDirty ? "有未保存的修改" : "已保存";
+  }
 }
 
 function setNotice(message, tone = "success") {
@@ -89,14 +95,22 @@ function renderActions() {
     : state.type === "ingredient"
       ? `./ingredient.html?id=${encodeURIComponent(state.id)}`
       : `./recipe.html?id=${encodeURIComponent(state.id)}`;
-  const loginHref = `./login.html?returnTo=${encodeURIComponent(window.location.href)}`;
   const saveLabel = state.isNew ? "创建菜谱" : "保存修改";
 
-  editHeaderActions.innerHTML = `
-    <a class="action-link" href="${targetHref}">${state.isNew ? "返回首页" : "返回详情"}</a>
-    ${state.canEdit ? `<button class="favorite-button is-active" type="submit" form="editForm">${saveLabel}</button>` : ""}
-    ${state.canEdit ? `<button class="action-link" type="button" id="logoutButton">退出登录</button>` : `<a class="action-link" href="${loginHref}">管理员登录</a>`}
-  `;
+  if (editStickyBack) {
+    editStickyBack.href = targetHref;
+    editStickyBack.textContent = state.isNew ? "返回首页" : "返回详情";
+  }
+
+  if (editStickyBar) {
+    editStickyBar.hidden = !state.canEdit;
+  }
+
+  if (editStickySave) {
+    editStickySave.hidden = !state.canEdit;
+    editStickySave.textContent = saveLabel;
+    editStickySave.disabled = state.saving;
+  }
 }
 
 function renderField(label, name, value, help = "", type = "text") {
@@ -465,6 +479,7 @@ async function saveCurrentForm() {
   try {
     state.saving = true;
     setDirty(true);
+    renderActions();
     editStatus.textContent = "正在保存...";
     setNotice("正在提交修改，请稍候...");
 
@@ -515,6 +530,7 @@ async function saveCurrentForm() {
     setNotice(error?.message || "保存失败，请重试", "error");
   } finally {
     state.saving = false;
+    renderActions();
   }
 }
 
@@ -525,16 +541,6 @@ async function load() {
   }
   state.canEdit = !api.isRemoteConfigured() ? true : Boolean(session.isAdmin);
   renderActions();
-
-  const logoutButton = document.getElementById("logoutButton");
-  if (logoutButton) {
-    logoutButton.addEventListener("click", () => {
-      if (api.clearAdminSession) {
-        api.clearAdminSession();
-      }
-      window.location.reload();
-    });
-  }
 
   if (!state.canEdit) {
     editTitle.textContent = "当前账号无编辑权限";

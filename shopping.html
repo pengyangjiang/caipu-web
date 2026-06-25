@@ -10,23 +10,15 @@
   </head>
   <body>
     <main class="page shopping-page">
-      <header class="page-header">
-        <div class="page-header-left">
-          <a class="back-link" href="./index.html">← 返回首页</a>
-          <p class="page-breadcrumb">购物清单</p>
-          <h1 class="page-title shopping-page-title">把常买食材集中到一处</h1>
-          <p class="page-desc">
-            你可以从菜谱详情页一键加入，也可以手动补充。勾选后会保存在当前浏览器里，随时回来继续整理。
-          </p>
-        </div>
-        <div class="page-header-actions">
-          <a class="action-link" href="./recipes.html">全部菜品</a>
-          <a class="action-link" href="./ingredients.html">全部食材</a>
-          <a class="action-link" href="./index.html">智能搜索</a>
-          <button class="action-link" type="button" id="clearPurchasedBtn">清空已购</button>
-          <button class="action-link" type="button" id="clearAllBtn">清空全部</button>
-        </div>
-      </header>
+      <header id="siteNav"></header>
+
+      <div class="page-intro">
+        <p class="page-breadcrumb">购物清单</p>
+        <h1 class="page-title shopping-page-title">把常买食材集中到一处</h1>
+        <p class="page-desc">
+          你可以从菜谱详情页一键加入，也可以手动补充。勾选后会保存在当前浏览器里，随时回来继续整理。
+        </p>
+      </div>
 
       <section class="panel shopping-shell">
         <div class="shopping-summary" id="shoppingSummary"></div>
@@ -45,10 +37,25 @@
           <button class="action-link shopping-submit" type="submit">添加到清单</button>
         </form>
 
+        <div class="shopping-list-toolbar">
+          <h2 class="shopping-list-title">我的清单</h2>
+          <details class="toolbar-more">
+            <summary class="action-link">清单操作</summary>
+            <div class="toolbar-more-panel">
+              <button class="admin-menu-item" type="button" id="clearPurchasedBtn">清空已购</button>
+              <button class="admin-menu-item toolbar-danger" type="button" id="clearAllBtn">清空全部</button>
+            </div>
+          </details>
+        </div>
+
         <div id="shoppingList"></div>
       </section>
     </main>
 
+    <script src="./content-model.js"></script>
+    <script src="./config.js"></script>
+    <script src="./api-client.js"></script>
+    <script src="./shared/site-nav.js"></script>
     <script src="./ui-toast.js"></script>
     <script src="./shopping.js"></script>
   </body>

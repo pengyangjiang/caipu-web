@@ -10,26 +10,7 @@
   </head>
   <body>
     <main class="page">
-      <header class="site-nav">
-        <a class="site-brand" href="./index.html">
-          <img class="site-brand-icon" src="./favicon.svg" width="22" height="22" alt="" />
-          <span>菜谱图谱</span>
-        </a>
-        <nav class="site-nav-links" aria-label="站点导航">
-          <a class="site-nav-link" href="./recipes.html">全部菜品</a>
-          <a class="site-nav-link" href="./ingredients.html">全部食材</a>
-          <a class="site-nav-link" href="./shopping.html">购物清单</a>
-        </nav>
-        <details class="admin-menu" id="adminMenu">
-          <summary class="admin-menu-trigger">管理员</summary>
-          <div class="admin-menu-panel">
-            <p class="admin-menu-status" id="adminStatus">正在检查登录状态...</p>
-            <a class="admin-menu-item" href="./login.html" id="adminLoginLink">登录</a>
-            <a class="admin-menu-item" href="./edit.html?type=recipe&new=1" id="newRecipeLink" hidden>新建菜谱</a>
-            <button class="admin-menu-item" type="button" id="adminLogoutBtn" hidden>退出登录</button>
-          </div>
-        </details>
-      </header>
+      <header id="siteNav"></header>
 
       <section class="panel home-hero">
         <div class="hero-copy">
@@ -115,6 +96,7 @@
     <script src="./content-model.js"></script>
     <script src="./config.js"></script>
     <script src="./api-client.js"></script>
+    <script src="./shared/site-nav.js"></script>
     <script src="./app.js"></script>
   </body>
 </html>

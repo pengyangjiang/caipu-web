@@ -10,24 +10,18 @@
   </head>
   <body>
     <main class="page ingredients-page">
-      <header class="page-header">
-        <div class="page-header-left">
-          <a class="back-link" href="./index.html">← 返回搜索页</a>
-          <p class="page-breadcrumb">全部食材</p>
-          <h1 class="page-title ingredients-page-title">浏览所有食材</h1>
-          <p class="page-desc">
-            按分类筛选或搜索名称、别名，点击条目查看营养信息与相关菜谱。
-          </p>
-        </div>
-        <div class="page-header-actions">
-          <a class="action-link" href="./index.html">智能搜索</a>
-          <a class="action-link" href="./recipes.html">全部菜品</a>
-          <a class="action-link" href="./shopping.html">购物清单</a>
-        </div>
-      </header>
+      <header id="siteNav"></header>
+
+      <div class="page-intro">
+        <p class="page-breadcrumb">全部食材</p>
+        <h1 class="page-title ingredients-page-title">浏览所有食材</h1>
+        <p class="page-desc">
+          按分类筛选或搜索名称、别名，点击条目查看营养信息与相关菜谱。
+        </p>
+      </div>
 
       <section class="panel ingredients-shell">
-        <div class="ingredients-toolbar">
+        <div class="ingredients-toolbar is-sticky">
           <label class="search-bar ingredients-search" for="ingredientsSearch">
             <span class="search-icon">⌕</span>
             <input
@@ -51,6 +45,7 @@
     <script src="./content-model.js"></script>
     <script src="./config.js"></script>
     <script src="./api-client.js"></script>
+    <script src="./shared/site-nav.js"></script>
     <script src="./ingredients.js"></script>
   </body>
 </html>

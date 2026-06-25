@@ -10,14 +10,13 @@
   </head>
   <body>
     <main class="page ingredient-page-layout">
-      <header class="page-header">
-        <div class="page-header-left">
-          <a class="back-link" href="./index.html">← 返回搜索页</a>
-          <p class="page-breadcrumb" id="ingredientBreadcrumb">食材详情</p>
-        </div>
-        <div class="page-header-actions" id="ingredientActions"></div>
-        <span class="admin-status" id="ingredientAdminStatus">正在检查登录状态...</span>
-      </header>
+      <header id="siteNav"></header>
+
+      <div class="page-intro">
+        <p class="page-breadcrumb" id="ingredientBreadcrumb">食材详情</p>
+      </div>
+
+      <div class="page-toolbar" id="detailToolbar"></div>
 
       <section class="panel ingredient-hero" id="ingredientHero"></section>
       <section class="panel ingredient-section" id="ingredientNutrition"></section>
@@ -30,6 +29,7 @@
     <script src="./content-model.js"></script>
     <script src="./config.js"></script>
     <script src="./api-client.js"></script>
+    <script src="./shared/site-nav.js"></script>
     <script src="./ui-toast.js"></script>
     <script src="./ingredient-detail.js"></script>
   </body>

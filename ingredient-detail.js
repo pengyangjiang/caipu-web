@@ -11,8 +11,7 @@ const ingredientNutrition = document.getElementById("ingredientNutrition");
 const ingredientTips = document.getElementById("ingredientTips");
 const ingredientRecipes = document.getElementById("ingredientRecipes");
 const ingredientBreadcrumb = document.getElementById("ingredientBreadcrumb");
-const ingredientActions = document.getElementById("ingredientActions");
-const ingredientAdminStatus = document.getElementById("ingredientAdminStatus");
+const detailToolbar = document.getElementById("detailToolbar");
 const SHOPPING_LIST_KEY = "recipe-shopping-list";
 
 function renderEmpty(message) {
@@ -147,37 +146,18 @@ function addIngredientToShoppingList(ingredient) {
   saveShoppingList(list);
 }
 
-async function renderAdminState() {
-  if (!ingredientAdminStatus) return;
+function renderPageToolbar(ingredient) {
+  if (!detailToolbar) return;
 
-  const session = await contentApi.getSessionStatus();
-  if (session.hasToken && session.checkedRemote && !session.isAdmin) {
-    contentApi.clearAdminSession();
-  }
-
-  if (!session.hasToken) {
-    ingredientAdminStatus.textContent = "未登录管理员";
-    return;
-  }
-
-  ingredientAdminStatus.textContent = session.isAdmin
-    ? "当前已登录管理员"
-    : "已保存登录信息，待验证";
-}
-
-function renderHeaderActions(ingredient) {
   const editLink = contentApi.canEdit() ? contentApi.getEditLink("ingredient", ingredient.id) : "";
-  const loginLink = `./login.html?returnTo=${encodeURIComponent(window.location.href)}`;
-  const logoutButton = contentApi.isAdminMode()
-    ? `<button class="action-link" type="button" id="ingredientLogoutBtn">退出登录</button>`
-    : `<a class="action-link" href="${loginLink}">管理员登录</a>`;
-  ingredientActions.innerHTML = `
-    <a class="action-link" href="./ingredient.html?id=${encodeURIComponent(ingredient.id)}">刷新</a>
-    <a class="action-link" href="./recipes.html">全部菜品</a>
-    <a class="action-link" href="./ingredients.html">全部食材</a>
-    <a class="action-link" href="./shopping.html">购物清单</a>
-    ${editLink ? `<a class="action-link" href="${editLink}">编辑</a>` : ""}
-    ${logoutButton}
+
+  detailToolbar.innerHTML = `
+    <div class="page-toolbar-group">
+      <a class="toolbar-link" href="./ingredients.html">← 返回食材列表</a>
+    </div>
+    <div class="page-toolbar-group">
+      ${editLink ? `<a class="action-link" href="${editLink}">编辑</a>` : ""}
+    </div>
   `;
 }
 
@@ -188,13 +168,13 @@ function renderIngredientPage(ingredient) {
     ingredientTips.innerHTML = "";
     ingredientRecipes.innerHTML = "";
     ingredientBreadcrumb.textContent = "食材详情";
-    ingredientActions.innerHTML = "";
+    if (detailToolbar) detailToolbar.innerHTML = "";
     return;
   }
 
   document.title = `${ingredient.name} - 食材详情`;
   ingredientBreadcrumb.textContent = ingredient.name;
-  renderHeaderActions(ingredient);
+  renderPageToolbar(ingredient);
   const reference = getDailyReference();
   const foodGrade = getFoodGrade(ingredient.caloriesPer100g);
   const nutrientRows = getIngredientNutrientRows(ingredient, reference);
@@ -324,15 +304,6 @@ function renderIngredientPage(ingredient) {
     }
   `;
 
-  const logoutButton = ingredientActions.querySelector("#ingredientLogoutBtn");
-  if (logoutButton) {
-    logoutButton.addEventListener("click", () => {
-      contentApi.clearAdminSession();
-      renderAdminState();
-      renderIngredientPage(ingredient);
-    });
-  }
-
   const shoppingButton = ingredientHero.querySelector("[data-shopping-add-ingredient]");
   if (shoppingButton) {
     shoppingButton.addEventListener("click", () => {
@@ -347,6 +318,5 @@ function renderIngredientPage(ingredient) {
 
 (async function init() {
   const ingredient = await contentApi.loadContent("ingredient", getIngredientIdFromQuery());
-  await renderAdminState();
   renderIngredientPage(ingredient);
 })();

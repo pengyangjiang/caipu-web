@@ -30,11 +30,6 @@ const recipeGrid = document.getElementById("recipeGrid");
 const detailPanel = document.getElementById("detailPanel");
 const previewSection = document.getElementById("previewSection");
 const closePreviewBtn = document.getElementById("closePreviewBtn");
-const adminStatus = document.getElementById("adminStatus");
-const adminLoginLink = document.getElementById("adminLoginLink");
-const adminLogoutBtn = document.getElementById("adminLogoutBtn");
-const newRecipeLink = document.getElementById("newRecipeLink");
-const adminMenu = document.getElementById("adminMenu");
 const searchModeTabs = document.getElementById("searchModeTabs");
 const recipeSearchPanel = document.getElementById("recipeSearchPanel");
 const ingredientSearchPanel = document.getElementById("ingredientSearchPanel");
@@ -42,26 +37,6 @@ const ingredientSearchPanel = document.getElementById("ingredientSearchPanel");
 const INGREDIENT_CHIP_LIMIT = 6;
 
 document.title = "菜谱搜索页";
-
-async function renderAdminStatus() {
-  if (!adminStatus || !api) return;
-
-  const session = await api.getSessionStatus();
-  if (session.isAdmin) {
-    adminStatus.textContent = session.checkedRemote ? "当前已登录管理员" : "已保存登录信息";
-    if (adminLoginLink) adminLoginLink.hidden = true;
-    if (adminLogoutBtn) adminLogoutBtn.hidden = false;
-    if (newRecipeLink) newRecipeLink.hidden = false;
-    return;
-  }
-
-  adminStatus.textContent = session.hasToken
-    ? "已保存登录信息，待验证"
-    : "未登录，登录后可编辑内容";
-  if (adminLoginLink) adminLoginLink.hidden = false;
-  if (adminLogoutBtn) adminLogoutBtn.hidden = true;
-  if (newRecipeLink) newRecipeLink.hidden = true;
-}
 
 async function syncRecipeCatalog() {
   if (!api?.listRecipes) return;
@@ -655,7 +630,6 @@ if (closePreviewBtn) {
 
 (async function init() {
   await syncRecipeCatalog();
-  await renderAdminStatus();
   renderAll();
 })();
 
@@ -678,11 +652,3 @@ recipeGrid.addEventListener("keydown", (event) => {
   event.preventDefault();
   openPreview(card.dataset.recipeId);
 });
-
-if (adminLogoutBtn && api) {
-  adminLogoutBtn.addEventListener("click", () => {
-    api.clearAdminSession();
-    if (adminMenu) adminMenu.open = false;
-    renderAdminStatus();
-  });
-}

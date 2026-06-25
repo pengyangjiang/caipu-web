@@ -7,8 +7,7 @@ if (!catalog || !contentApi) {
 
 const detailRoot = document.getElementById("detailRoot");
 const recipeBreadcrumb = document.getElementById("recipeBreadcrumb");
-const detailActions = document.getElementById("detailActions");
-const recipeAdminStatus = document.getElementById("recipeAdminStatus");
+const detailToolbar = document.getElementById("detailToolbar");
 const deleteRecipeModal = document.getElementById("deleteRecipeModal");
 const deleteRecipeName = document.getElementById("deleteRecipeName");
 const deleteRecipeHint = document.getElementById("deleteRecipeHint");
@@ -306,24 +305,6 @@ function setCookCount(recipeId, value) {
   const counts = getCookCounts();
   counts[recipeId] = Math.max(0, Number(value) || 0);
   saveCookCounts(counts);
-}
-
-async function renderAdminState() {
-  if (!recipeAdminStatus) return;
-
-  const session = await contentApi.getSessionStatus();
-  if (session.hasToken && session.checkedRemote && !session.isAdmin) {
-    contentApi.clearAdminSession();
-  }
-
-  if (!session.hasToken) {
-    recipeAdminStatus.textContent = "未登录管理员";
-    return;
-  }
-
-  recipeAdminStatus.textContent = session.isAdmin
-    ? "当前已登录管理员"
-    : "已保存登录信息，待验证";
 }
 
 function renderIngredients(recipe) {
@@ -667,31 +648,37 @@ async function confirmDeleteRecipe() {
   }
 }
 
-function renderHeaderActions(recipe) {
+function renderPageToolbar(recipe) {
+  if (!detailToolbar) return;
+
   const { prevId, nextId } = getAdjacentRecipeIds(recipe.id);
   const favoriteActive = isFavorited(recipe.id);
   const editLink = contentApi.canEdit() ? contentApi.getEditLink("recipe", recipe.id) : "";
   const newRecipeLink = contentApi.canEdit() && contentApi.getNewRecipeLink
     ? contentApi.getNewRecipeLink()
     : "";
-  const loginLink = `./login.html?returnTo=${encodeURIComponent(window.location.href)}`;
-  const logoutButton = contentApi.isAdminMode()
-    ? `<button class="action-link" type="button" id="recipeLogoutBtn">退出登录</button>`
-    : `<a class="action-link" href="${loginLink}">管理员登录</a>`;
+  const moreItems = [
+    newRecipeLink ? `<a class="admin-menu-item" href="${newRecipeLink}">新建菜谱</a>` : "",
+    contentApi.canEdit() ? `<button class="admin-menu-item toolbar-danger" type="button" id="deleteRecipeBtn">删除菜谱</button>` : "",
+  ].filter(Boolean).join("");
 
-  detailActions.innerHTML = `
-    <a class="action-link" href="./recipe.html?id=${encodeURIComponent(prevId)}">← 上一个</a>
-    <a class="action-link" href="./recipe.html?id=${encodeURIComponent(nextId)}">下一个 →</a>
-    <a class="action-link" href="./recipes.html">全部菜品</a>
-    <a class="action-link" href="./ingredients.html">全部食材</a>
-    <a class="action-link" href="./shopping.html">购物清单</a>
-    ${editLink ? `<a class="action-link" href="${editLink}">编辑</a>` : ""}
-    ${contentApi.canEdit() ? `<button class="action-link is-danger" type="button" id="deleteRecipeBtn">删除菜谱</button>` : ""}
-    ${newRecipeLink ? `<a class="action-link" href="${newRecipeLink}">新建菜谱</a>` : ""}
-    ${logoutButton}
-    <button class="favorite-button ${favoriteActive ? "is-active" : ""}" type="button" data-favorite-id="${recipe.id}">
-      ${favoriteActive ? "♥ 已收藏" : "♡ 收藏"}
-    </button>
+  detailToolbar.innerHTML = `
+    <div class="page-toolbar-group">
+      <a class="toolbar-link" href="./recipe.html?id=${encodeURIComponent(prevId)}">← 上一个</a>
+      <a class="toolbar-link" href="./recipe.html?id=${encodeURIComponent(nextId)}">下一个 →</a>
+    </div>
+    <div class="page-toolbar-group">
+      <button class="favorite-button ${favoriteActive ? "is-active" : ""}" type="button" data-favorite-id="${recipe.id}">
+        ${favoriteActive ? "♥ 已收藏" : "♡ 收藏"}
+      </button>
+      ${editLink ? `<a class="action-link" href="${editLink}">编辑</a>` : ""}
+      ${moreItems ? `
+        <details class="toolbar-more">
+          <summary class="action-link">更多</summary>
+          <div class="toolbar-more-panel">${moreItems}</div>
+        </details>
+      ` : ""}
+    </div>
   `;
 }
 
@@ -699,7 +686,7 @@ function renderRecipeDetail(recipe) {
   if (!recipe) {
     detailRoot.innerHTML = renderEmpty("没有找到对应的菜谱。");
     recipeBreadcrumb.textContent = "菜谱详情";
-    detailActions.innerHTML = "";
+    if (detailToolbar) detailToolbar.innerHTML = "";
     currentRenderedRecipe = null;
     return;
   }
@@ -708,7 +695,7 @@ function renderRecipeDetail(recipe) {
   currentRenderedRecipe = recipe;
   document.title = `${recipe.name} - 菜谱详情`;
   recipeBreadcrumb.textContent = recipe.name;
-  renderHeaderActions(recipe);
+  renderPageToolbar(recipe);
 
   detailRoot.innerHTML = `
     <article class="detail-layout">
@@ -757,7 +744,7 @@ function renderRecipeDetail(recipe) {
     </article>
   `;
 
-  const favoriteButton = detailActions.querySelector("[data-favorite-id]");
+  const favoriteButton = detailToolbar?.querySelector("[data-favorite-id]");
   if (favoriteButton) {
     favoriteButton.addEventListener("click", () => {
       toggleFavorite(recipe.id);
@@ -765,16 +752,7 @@ function renderRecipeDetail(recipe) {
     });
   }
 
-  const logoutButton = detailActions.querySelector("#recipeLogoutBtn");
-  if (logoutButton) {
-    logoutButton.addEventListener("click", () => {
-      contentApi.clearAdminSession();
-      renderAdminState();
-      renderRecipeDetail(recipe);
-    });
-  }
-
-  const deleteButton = detailActions.querySelector("#deleteRecipeBtn");
+  const deleteButton = detailToolbar?.querySelector("#deleteRecipeBtn");
   if (deleteButton) {
     deleteButton.addEventListener("click", () => {
       openDeleteRecipeModal(recipe);
@@ -844,6 +822,5 @@ function syncCoverImageState(recipe) {
   }
 
   const recipe = await contentApi.loadContent("recipe", getRecipeIdFromQuery());
-  await renderAdminState();
   renderRecipeDetail(recipe);
 })();
