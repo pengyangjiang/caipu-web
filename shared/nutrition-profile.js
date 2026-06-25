@@ -365,11 +365,95 @@ function ensureNutritionProfile(recipe, options = {}) {
   return { ...enrichedRecipe, nutritionProfile: profile };
 }
 
+const NUTRIENT_BREAKDOWN_META = {
+  calories: { label: '热量', unit: 'kcal', color: '#d97706', nested: false, field: 'caloriesPer100g' },
+  protein: { label: '蛋白质', unit: 'g', color: '#2563eb', nested: true, field: 'protein' },
+  fat: { label: '脂肪', unit: 'g', color: '#059669', nested: true, field: 'fat' },
+  carbs: { label: '碳水', unit: 'g', color: '#7c3aed', nested: true, field: 'carbs' },
+};
+
+const PIE_SLICE_COLORS = [
+  '#d97706', '#2563eb', '#059669', '#7c3aed', '#db2777', '#0891b2',
+  '#ca8a04', '#4f46e5', '#0d9488', '#9333ea', '#e11d48', '#0284c7',
+];
+
+function readNutrientValueFromDetail(detail, meta, grams) {
+  const factor = grams / 100;
+  if (meta.nested) {
+    return Number(detail.nutritionPer100g?.[meta.field] || 0) * factor;
+  }
+  return Number(detail.caloriesPer100g || 0) * factor;
+}
+
+function getIngredientNutrientBreakdown(recipe, nutrientKey, options = {}) {
+  const meta = NUTRIENT_BREAKDOWN_META[nutrientKey];
+  if (!meta || !recipe) return null;
+
+  const lookup = createIngredientLookup(options);
+  const contributions = new Map();
+
+  for (const group of recipe.ingredients || []) {
+    for (const item of group.items || []) {
+      if (isExcludedBulkLiquid(item.name, item.amount)) continue;
+
+      const grams = parseAmountToGrams(item.amount);
+      if (grams <= 0) continue;
+
+      const detail = lookup.get(normalizeIngredientName(item.name));
+      if (!detail) continue;
+
+      const value = readNutrientValueFromDetail(detail, meta, grams);
+      if (value <= 0) continue;
+
+      const key = normalizeIngredientName(item.name);
+      const existing = contributions.get(key);
+      if (existing) {
+        existing.grams = round1(existing.grams + grams);
+        existing.value = round1(existing.value + value);
+        if (!existing.amounts.includes(item.amount)) {
+          existing.amounts.push(item.amount);
+        }
+      } else {
+        contributions.set(key, {
+          name: item.name,
+          amount: item.amount,
+          amounts: [item.amount],
+          grams: round1(grams),
+          value: round1(value),
+        });
+      }
+    }
+  }
+
+  const items = [...contributions.values()]
+    .sort((a, b) => b.value - a.value);
+
+  const total = round1(items.reduce((sum, item) => sum + item.value, 0));
+  const enrichedItems = items.map((item, index) => ({
+    ...item,
+    amount: item.amounts.length > 1 ? item.amounts.join(' + ') : item.amount,
+    percent: total > 0 ? round1((item.value / total) * 100) : 0,
+    color: PIE_SLICE_COLORS[index % PIE_SLICE_COLORS.length],
+  }));
+
+  return {
+    nutrientKey,
+    label: meta.label,
+    unit: meta.unit,
+    color: meta.color,
+    total,
+    items: enrichedItems,
+    hasData: enrichedItems.length > 0 && total > 0,
+  };
+}
+
 if (typeof module !== 'undefined') {
   module.exports = {
     buildNutritionProfile,
     ensureNutritionProfile,
     createIngredientLookup,
+    getIngredientNutrientBreakdown,
+    NUTRIENT_BREAKDOWN_META,
     PROFILE_VERSION,
   };
 }
@@ -379,6 +463,8 @@ if (typeof window !== 'undefined') {
     buildNutritionProfile,
     ensureNutritionProfile,
     createIngredientLookup,
+    getIngredientNutrientBreakdown,
+    NUTRIENT_BREAKDOWN_META,
     PROFILE_VERSION,
   };
 }

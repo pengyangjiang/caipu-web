@@ -12,6 +12,17 @@ const deleteRecipeModal = document.getElementById("deleteRecipeModal");
 const deleteRecipeName = document.getElementById("deleteRecipeName");
 const deleteRecipeHint = document.getElementById("deleteRecipeHint");
 const confirmDeleteRecipeBtn = document.getElementById("confirmDeleteRecipeBtn");
+const nutrientBreakdownModal = document.getElementById("nutrientBreakdownModal");
+const nutrientBreakdownTitle = document.getElementById("nutrientBreakdownTitle");
+const nutrientBreakdownSubtitle = document.getElementById("nutrientBreakdownSubtitle");
+const nutrientBreakdownBody = document.getElementById("nutrientBreakdownBody");
+
+const NUTRIENT_LABEL_TO_KEY = {
+  热量: "calories",
+  蛋白质: "protein",
+  脂肪: "fat",
+  碳水: "carbs",
+};
 
 const FAVORITE_KEY = "recipe-favorites";
 const COOK_COUNT_KEY = "recipe-cook-counts";
@@ -177,9 +188,115 @@ function getSummaryRingItems(recipe) {
 
   return items.map((item) => ({
     ...item,
+    nutrientKey: NUTRIENT_LABEL_TO_KEY[item.label] || item.label,
     ringPercent: Math.max(0, Math.min(Number(item.percent || 0), 100)),
     percentText: `${Number(item.percent || 0).toFixed(1)}%`,
   }));
+}
+
+function buildPieGradient(items) {
+  if (!items.length) return "#edf2f7";
+  let cursor = 0;
+  const stops = items.map((item) => {
+    const start = cursor;
+    cursor += Number(item.percent || 0);
+    return `${item.color} ${start}% ${cursor}%`;
+  });
+  return `conic-gradient(${stops.join(", ")})`;
+}
+
+function formatBreakdownValue(value, unit) {
+  const normalized = Number(value || 0);
+  const text = unit === "kcal" ? normalized.toFixed(0) : normalized.toFixed(1);
+  return unit === "kcal" ? `${text} kcal` : `${text}g`;
+}
+
+function renderNutrientBreakdownContent(breakdown) {
+  if (!breakdown?.hasData) {
+    return `
+      <div class="nutrient-breakdown-empty">
+        暂时无法按食材拆分${breakdown?.label || "营养"}。<br />
+        请确认原材料已填写用量，且对应食材已在食材库中有营养数据。
+      </div>
+    `;
+  }
+
+  return `
+    <div class="nutrient-breakdown-chart-wrap">
+      <div class="nutrient-breakdown-pie" style="background: radial-gradient(circle at center, #fff 0 52%, transparent 53% 100%), ${buildPieGradient(breakdown.items)};">
+        <div class="nutrient-breakdown-pie-inner">
+          <p class="nutrient-breakdown-pie-value">${formatBreakdownValue(breakdown.total, breakdown.unit)}</p>
+          <p class="nutrient-breakdown-pie-label">合计 ${breakdown.label}</p>
+        </div>
+      </div>
+    </div>
+    <div class="nutrient-breakdown-list">
+      ${renderList(
+        breakdown.items,
+        (item) => `
+          <article class="nutrient-breakdown-item">
+            <span class="nutrient-breakdown-dot" style="background: ${item.color};"></span>
+            <div class="nutrient-breakdown-item-main">
+              <p class="nutrient-breakdown-item-name">${item.name}</p>
+              <p class="nutrient-breakdown-item-amount">${item.amount}</p>
+            </div>
+            <div class="nutrient-breakdown-item-stats">
+              <p class="nutrient-breakdown-item-value">${formatBreakdownValue(item.value, breakdown.unit)}</p>
+              <p class="nutrient-breakdown-item-percent">${item.percent}%</p>
+            </div>
+          </article>
+        `,
+      )}
+    </div>
+  `;
+}
+
+function openNutrientBreakdownModal(recipe, nutrientKey) {
+  if (!nutrientBreakdownModal || !recipe) return;
+
+  const builder = window.nutritionProfileBuilder;
+  const breakdown = builder?.getIngredientNutrientBreakdown
+    ? builder.getIngredientNutrientBreakdown(recipe, nutrientKey, {
+        ingredientDetails: window.ingredientDetails,
+        catalogIngredients: catalog.ingredients,
+      })
+    : null;
+
+  if (!breakdown) return;
+
+  nutrientBreakdownModal.style.setProperty("--nutrient-accent", breakdown.color);
+  if (nutrientBreakdownTitle) {
+    nutrientBreakdownTitle.textContent = `${breakdown.label}来源`;
+  }
+  if (nutrientBreakdownSubtitle) {
+    nutrientBreakdownSubtitle.textContent = breakdown.hasData
+      ? `按已识别食材与用量估算，共 ${formatBreakdownValue(breakdown.total, breakdown.unit)}，扇形占比代表各食材贡献。`
+      : "以下食材尚未录入营养数据，或缺少可换算的用量。";
+  }
+  if (nutrientBreakdownBody) {
+    nutrientBreakdownBody.innerHTML = renderNutrientBreakdownContent(breakdown);
+  }
+
+  nutrientBreakdownModal.hidden = false;
+  document.body.style.overflow = "hidden";
+}
+
+function closeNutrientBreakdownModal() {
+  if (!nutrientBreakdownModal) return;
+  nutrientBreakdownModal.hidden = true;
+  document.body.style.overflow = "";
+}
+
+function bindSummaryRingInteractions(recipe) {
+  detailRoot.querySelectorAll("[data-nutrient-key]").forEach((card) => {
+    const open = () => openNutrientBreakdownModal(recipe, card.dataset.nutrientKey);
+    card.addEventListener("click", open);
+    card.addEventListener("keydown", (event) => {
+      if (event.key !== "Enter" && event.key !== " ") return;
+      event.preventDefault();
+      open();
+    });
+  });
 }
 
 function getFavorites() {
@@ -414,7 +531,14 @@ function renderSummaryRings(recipe) {
       ${renderList(
         items,
         (item) => `
-          <article class="summary-ring-card" style="--ring-color: ${item.color};">
+          <article
+            class="summary-ring-card is-clickable"
+            style="--ring-color: ${item.color};"
+            data-nutrient-key="${item.nutrientKey}"
+            role="button"
+            tabindex="0"
+            aria-label="查看${item.label}来源"
+          >
             <div class="summary-ring" style="--progress: ${item.ringPercent}; --ring-color: ${item.color};">
               <div class="summary-ring-inner">
                 <span class="summary-ring-value">${item.value}</span>
@@ -422,6 +546,7 @@ function renderSummaryRings(recipe) {
               </div>
             </div>
             <p class="summary-ring-label">${item.label}</p>
+            <p class="summary-ring-hint">点击查看来源</p>
           </article>
         `
       )}
@@ -786,6 +911,7 @@ function renderRecipeDetail(recipe) {
   }
 
   syncCoverImageState(recipe);
+  bindSummaryRingInteractions(recipe);
 }
 
 function syncCoverImageState(recipe) {
@@ -818,6 +944,15 @@ function syncCoverImageState(recipe) {
   window.addEventListener("keydown", (event) => {
     if (event.key === "Escape" && deleteRecipeModal && !deleteRecipeModal.hidden) {
       closeDeleteRecipeModal();
+    }
+    if (event.key === "Escape" && nutrientBreakdownModal && !nutrientBreakdownModal.hidden) {
+      closeNutrientBreakdownModal();
+    }
+  });
+
+  nutrientBreakdownModal?.addEventListener("click", (event) => {
+    if (event.target.closest("[data-close-nutrient-modal]")) {
+      closeNutrientBreakdownModal();
     }
   });
 

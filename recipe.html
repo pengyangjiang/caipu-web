@@ -40,6 +40,19 @@
       </div>
     </div>
 
+    <div class="nutrient-breakdown-modal" id="nutrientBreakdownModal" hidden>
+      <div class="nutrient-breakdown-backdrop" data-close-nutrient-modal></div>
+      <div class="nutrient-breakdown-dialog" role="dialog" aria-modal="true" aria-labelledby="nutrientBreakdownTitle">
+        <button class="nutrient-breakdown-close" type="button" data-close-nutrient-modal aria-label="关闭">×</button>
+        <div class="nutrient-breakdown-header">
+          <p class="nutrient-breakdown-eyebrow" id="nutrientBreakdownEyebrow">营养来源</p>
+          <h2 class="nutrient-breakdown-title" id="nutrientBreakdownTitle">热量来源</h2>
+          <p class="nutrient-breakdown-subtitle" id="nutrientBreakdownSubtitle"></p>
+        </div>
+        <div class="nutrient-breakdown-body" id="nutrientBreakdownBody"></div>
+      </div>
+    </div>
+
     <script src="./data.js"></script>
     <script src="./recipe-details.js"></script>
     <script src="./ingredient-details.js"></script>
