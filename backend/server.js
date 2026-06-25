@@ -133,7 +133,57 @@ function ok(res, data, statusCode = 200) {
   sendJson(res, statusCode, { ok: true, data });
 }
 
-function handleCollection(res, type) {
+async function handleCreate(req, res, type) {
+  if (!isAdmin(req)) {
+    forbidden(res, 'Admin permission required');
+    return;
+  }
+
+  let payload;
+  try {
+    payload = await readBody(req);
+  } catch {
+    badRequest(res, 'Invalid JSON body');
+    return;
+  }
+
+  if (!payload || typeof payload !== 'object') {
+    badRequest(res, 'Body must be a JSON object');
+    return;
+  }
+
+  if (type !== 'recipe') {
+    sendText(res, 405, 'Method Not Allowed');
+    return;
+  }
+
+  try {
+    const created = store.createRecipe(payload.id, payload);
+    ok(res, created, 201);
+  } catch (error) {
+    if (error.code === 'ALREADY_EXISTS') {
+      conflict(res, error.message);
+      return;
+    }
+    if (error.code === 'INVALID_ID') {
+      badRequest(res, error.message);
+      return;
+    }
+    badRequest(res, error.message || 'Unable to create record');
+  }
+}
+
+async function handleCollection(req, res, type) {
+  if (req.method === 'POST' && type === 'recipe') {
+    await handleCreate(req, res, type);
+    return;
+  }
+
+  if (req.method !== 'GET') {
+    sendText(res, 405, 'Method Not Allowed');
+    return;
+  }
+
   if (type === 'recipe') {
     ok(res, store.listRecipes());
     return;
@@ -261,13 +311,13 @@ async function handleRequest(req, res) {
     return;
   }
 
-  if (pathname === '/api/recipes' && req.method === 'GET') {
-    handleCollection(res, 'recipe');
+  if (pathname === '/api/recipes' && (req.method === 'GET' || req.method === 'POST')) {
+    await handleCollection(req, res, 'recipe');
     return;
   }
 
   if (pathname === '/api/ingredients' && req.method === 'GET') {
-    handleCollection(res, 'ingredient');
+    await handleCollection(req, res, 'ingredient');
     return;
   }
 

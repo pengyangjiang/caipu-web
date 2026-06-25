@@ -16,7 +16,8 @@ const editForm = document.getElementById("editForm");
 
 const state = {
   type: getParam("type") || "recipe",
-  id: getParam("id") || getDefaultId(getParam("type") || "recipe"),
+  isNew: getParam("new") === "1" && (getParam("type") || "recipe") === "recipe",
+  id: getParam("new") === "1" ? "" : (getParam("id") || getDefaultId(getParam("type") || "recipe")),
   data: null,
   dirty: false,
   saving: false,
@@ -58,15 +59,41 @@ function renderEmpty(message) {
   return `<div class="empty-state">${message}</div>`;
 }
 
+function createEmptyRecipe() {
+  return {
+    id: "",
+    name: "",
+    coverImage: "",
+    desc: "",
+    categories: [],
+    tags: [],
+    statusTags: [],
+    calories: { perServing: 0, total: 0, unit: "千卡", note: "" },
+    summary: [],
+    meta: [],
+    ingredients: [],
+    ingredientNames: [],
+    ingredientCount: 0,
+    steps: [],
+    nutrition: [],
+    tips: [],
+    version: 1,
+    updatedAt: null,
+  };
+}
+
 function renderActions() {
-  const targetHref = state.type === "ingredient"
-    ? `./ingredient.html?id=${encodeURIComponent(state.id)}`
-    : `./recipe.html?id=${encodeURIComponent(state.id)}`;
+  const targetHref = state.isNew
+    ? "./index.html"
+    : state.type === "ingredient"
+      ? `./ingredient.html?id=${encodeURIComponent(state.id)}`
+      : `./recipe.html?id=${encodeURIComponent(state.id)}`;
   const loginHref = `./login.html?returnTo=${encodeURIComponent(window.location.href)}`;
+  const saveLabel = state.isNew ? "创建菜谱" : "保存修改";
 
   editHeaderActions.innerHTML = `
-    <a class="action-link" href="${targetHref}">返回详情</a>
-    ${state.canEdit ? `<button class="favorite-button is-active" type="submit" form="editForm">保存修改</button>` : ""}
+    <a class="action-link" href="${targetHref}">${state.isNew ? "返回首页" : "返回详情"}</a>
+    ${state.canEdit ? `<button class="favorite-button is-active" type="submit" form="editForm">${saveLabel}</button>` : ""}
     ${state.canEdit ? `<button class="action-link" type="button" id="logoutButton">退出登录</button>` : `<a class="action-link" href="${loginHref}">管理员登录</a>`}
   `;
 }
@@ -168,16 +195,19 @@ function parseTextRows(text) {
     .filter((row) => row.title && row.content);
 }
 
-function renderRecipeEditor(recipe) {
-  editBreadcrumb.textContent = `编辑菜谱 / ${recipe.name}`;
-  editTitle.textContent = `编辑菜谱：${recipe.name}`;
-  editDesc.textContent = "可以修改步骤、注意事项、营养数据、原材料等内容。多行字段支持按行编辑。";
+function renderRecipeEditor(recipe, isNew = false) {
+  editBreadcrumb.textContent = isNew ? "新建菜谱" : `编辑菜谱 / ${recipe.name}`;
+  editTitle.textContent = isNew ? "新建菜谱" : `编辑菜谱：${recipe.name}`;
+  editDesc.textContent = isNew
+    ? "填写菜谱 ID 和基础信息后保存，即可创建新菜谱。"
+    : "可以修改步骤、注意事项、营养数据、原材料等内容。多行字段支持按行编辑。";
   editModeHint.textContent = api.isRemoteConfigured() ? "会优先保存到后端接口" : "当前会先保存为本地草稿";
 
   editForm.innerHTML = `
     <section class="edit-section">
       <h2 class="section-title">基础信息</h2>
       <div class="edit-grid">
+        ${isNew ? renderField("菜谱 ID", "id", recipe.id || "", "小写英文、数字和连字符，例如：tomato-egg-soup") : ""}
         ${renderField("菜名", "name", recipe.name)}
         ${renderField("封面图", "coverImage", recipe.coverImage)}
         ${renderTextareaField("简介", "desc", recipe.desc, "支持多行描述")}
@@ -219,8 +249,8 @@ function renderRecipeEditor(recipe) {
     <section class="edit-section">
       <h2 class="section-title">版本信息</h2>
       <div class="edit-grid">
-        ${renderField("版本", "version", recipe.version || 1, "保存时会自动递增", "number")}
-        ${renderField("更新时间", "updatedAt", recipe.updatedAt || "", "保存后自动更新", "text")}
+        ${isNew ? "" : renderField("版本", "version", recipe.version || 1, "保存时会自动递增", "number")}
+        ${isNew ? "" : renderField("更新时间", "updatedAt", recipe.updatedAt || "", "保存后自动更新", "text")}
       </div>
     </section>
   `;
@@ -339,15 +369,28 @@ async function saveCurrentForm() {
       ? readIngredientForm(editForm, state.data)
       : readRecipeForm(editForm, state.data);
 
-    const saved = await api.saveContent(state.type, state.id, payload);
+    let saved;
+    const wasNew = state.isNew;
+    if (state.isNew) {
+      const newId = new FormData(editForm).get("id")?.trim();
+      if (!newId) {
+        throw new Error("请填写菜谱 ID");
+      }
+      saved = await api.createContent(state.type, newId, payload);
+      state.isNew = false;
+      state.id = saved.id;
+    } else {
+      saved = await api.saveContent(state.type, state.id, payload);
+    }
+
     state.data = saved;
     const savedTo = api.getLastSaveTarget?.() || (api.isRemoteConfigured() ? 'remote' : 'local');
     const saveFailure = api.getLastSaveFailure?.() || '';
     const successText = savedTo === 'remote'
-      ? '已保存到后端'
+      ? (wasNew ? '已创建并保存到后端' : '已保存到后端')
       : saveFailure
-        ? `已保存到本机草稿：${saveFailure}`
-        : '已保存到本机草稿（未写入服务器，换设备会丢失）';
+        ? `${wasNew ? '已创建到本机草稿' : '已保存到本机草稿'}：${saveFailure}`
+        : (wasNew ? '已创建到本机草稿（未写入服务器，换设备会丢失）' : '已保存到本机草稿（未写入服务器，换设备会丢失）');
     editStatus.textContent = successText;
     setNotice(`${successText}，正在返回详情页...`);
     setDirty(false);
@@ -405,6 +448,9 @@ async function load() {
       return;
     }
     renderIngredientEditor(ingredient);
+  } else if (state.isNew) {
+    state.data = createEmptyRecipe();
+    renderRecipeEditor(state.data, true);
   } else {
     const recipe = await api.loadContent("recipe", state.id);
     state.data = recipe;

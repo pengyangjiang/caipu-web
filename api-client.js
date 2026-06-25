@@ -107,6 +107,23 @@
     })[0];
   }
 
+  function pickRecipeSummary(recipe) {
+    const normalized = model.normalize('recipe', recipe);
+    return {
+      id: normalized.id,
+      name: normalized.name,
+      coverImage: normalized.coverImage,
+      desc: normalized.desc,
+      categories: normalized.categories,
+      tags: normalized.tags,
+      statusTags: normalized.statusTags,
+      calories: normalized.calories,
+      summary: normalized.summary,
+      ingredientNames: normalized.ingredientNames,
+      ingredientCount: normalized.ingredientCount,
+    };
+  }
+
   let lastSaveTarget = 'local';
   let lastSaveFailure = '';
 
@@ -190,12 +207,98 @@
     return normalized;
   }
 
+  async function createContent(type, id, payload) {
+    if (type !== 'recipe') {
+      throw new Error('当前仅支持新建菜谱');
+    }
+
+    const normalizedId = String(id || '').trim();
+    const normalized = model.normalize(type, {
+      ...payload,
+      id: normalizedId,
+      version: 1,
+      updatedAt: model.now(),
+    });
+
+    lastSaveTarget = 'local';
+    lastSaveFailure = '';
+
+    if (hasRemote) {
+      try {
+        const data = unwrapResponse(await request('/api/recipes', {
+          method: 'POST',
+          body: JSON.stringify({ ...normalized, id: normalizedId }),
+        }));
+        lastSaveTarget = 'remote';
+        return model.normalize(type, data || normalized);
+      } catch (error) {
+        if (error.code === 'ALREADY_EXISTS' || error.code === 'INVALID_ID') {
+          throw error;
+        }
+        if (error.code === 'KV_NOT_CONFIGURED') {
+          lastSaveFailure = '服务器未配置 CONTENT_KV，无法在线持久化保存';
+        } else if (error.status === 403) {
+          lastSaveFailure = '管理员权限失效，请重新登录';
+          throw error;
+        } else {
+          lastSaveFailure = error.message || '服务器创建失败';
+        }
+      }
+    }
+
+    const sourceMap = getSourceMap(type);
+    const drafts = readDrafts(type);
+    if (sourceMap[normalizedId] || drafts[normalizedId]) {
+      const error = new Error('菜谱 ID 已存在');
+      error.code = 'ALREADY_EXISTS';
+      throw error;
+    }
+
+    drafts[normalizedId] = normalized;
+    writeDrafts(type, drafts);
+    sourceMap[normalizedId] = normalized;
+
+    return normalized;
+  }
+
+  async function listRecipes() {
+    if (hasRemote) {
+      try {
+        const data = unwrapResponse(await request('/api/recipes'));
+        if (Array.isArray(data)) {
+          return data;
+        }
+      } catch {
+        // fall back to local data
+      }
+    }
+
+    const drafts = readDrafts('recipe');
+    const merged = { ...getSourceMap('recipe'), ...drafts };
+    return Object.values(merged).map((item) => pickRecipeSummary(item));
+  }
+
+  function mergeCatalogRecipes(catalog, remoteList) {
+    if (!catalog || !Array.isArray(remoteList)) return catalog;
+    const byId = new Map((catalog.recipes || []).map((item) => [item.id, item]));
+    for (const item of remoteList) {
+      if (!item?.id) continue;
+      byId.set(item.id, { ...(byId.get(item.id) || {}), ...item });
+    }
+    catalog.recipes = Array.from(byId.values());
+    return catalog;
+  }
+
   function isRemoteConfigured() {
     return hasRemote;
   }
 
   function getEditLink(type, id) {
     return `./edit.html?type=${encodeURIComponent(type)}&id=${encodeURIComponent(id)}`;
+  }
+
+  function getNewRecipeLink() {
+    return './edit.html?type=recipe&new=1';
   }
 
   function getModeLabel() {
@@ -265,10 +368,14 @@
   window.contentApi = {
     loadContent,
     saveContent,
+    createContent,
+    listRecipes,
+    mergeCatalogRecipes,
     getLastSaveTarget,
     getLastSaveFailure,
     isRemoteConfigured,
     getEditLink,
+    getNewRecipeLink,
     getModeLabel,
     getSessionStatus,
     clearAdminSession,

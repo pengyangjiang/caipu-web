@@ -211,6 +211,57 @@ function mergeIngredient(current, patch) {
   });
 }
 
+async function handleCreateRecipe(request, env) {
+  if (!isAdmin(request, env)) {
+    return fail('FORBIDDEN', 'Admin permission required', 403);
+  }
+
+  let payload;
+  try {
+    payload = await request.json();
+  } catch {
+    return fail('BAD_REQUEST', 'Invalid JSON body', 400);
+  }
+
+  if (!payload || typeof payload !== 'object') {
+    return fail('BAD_REQUEST', 'Body must be a JSON object', 400);
+  }
+
+  const id = String(payload.id || '').trim();
+  if (!id || !/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(id)) {
+    return fail('BAD_REQUEST', 'Recipe id must use lowercase letters, numbers and hyphens', 400);
+  }
+
+  const store = await loadStore(request, env);
+  if (store.recipes[id]) {
+    return fail('ALREADY_EXISTS', 'Recipe id already exists', 409);
+  }
+
+  const next = normalizeRecipe({
+    ...clone(payload),
+    id,
+    version: 1,
+    updatedAt: new Date().toISOString(),
+    createdAt: new Date().toISOString(),
+  });
+  next.ingredientNames = Array.isArray(next.ingredientNames)
+    ? next.ingredientNames
+    : next.ingredients.flatMap((group) => (group.items || []).map((item) => item.name));
+  next.ingredientCount = Number(next.ingredientCount || next.ingredientNames.length);
+  store.recipes[id] = next;
+
+  try {
+    await persistStore(env, store.recipes, store.ingredients);
+  } catch (error) {
+    if (error.code === 'KV_NOT_CONFIGURED') {
+      return fail('KV_NOT_CONFIGURED', error.message, 503);
+    }
+    throw error;
+  }
+
+  return ok(next, 201);
+}
+
 async function handleDetail(request, env, type, id) {
   const store = await loadStore(request, env);
   const map = type === 'recipe' ? store.recipes : store.ingredients;
@@ -355,6 +406,10 @@ export async function onRequest(context) {
         recipes,
         ingredients,
       });
+    }
+
+    if (route === 'recipes' && request.method === 'POST') {
+      return handleCreateRecipe(request, env);
     }
 
     if (route === 'recipes' && request.method === 'GET') {

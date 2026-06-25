@@ -196,6 +196,39 @@ function createStore() {
     });
   }
 
+  function assertNewId(id, map, type) {
+    const normalizedId = String(id || '').trim();
+    if (!normalizedId || !/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(normalizedId)) {
+      const error = new Error('Recipe id must use lowercase letters, numbers and hyphens');
+      error.code = 'INVALID_ID';
+      throw error;
+    }
+    if (map[normalizedId]) {
+      const error = new Error(`${type} id already exists`);
+      error.code = 'ALREADY_EXISTS';
+      throw error;
+    }
+    return normalizedId;
+  }
+
+  function createRecipeRecord(id, patch) {
+    const normalizedId = assertNewId(id, recipes, 'Recipe');
+    const next = normalizeRecipe({
+      ...clone(patch),
+      id: normalizedId,
+      version: 1,
+      updatedAt: new Date().toISOString(),
+      createdAt: new Date().toISOString(),
+    });
+    next.ingredientNames = Array.isArray(next.ingredientNames)
+      ? next.ingredientNames
+      : next.ingredients.flatMap((group) => (group.items || []).map((item) => item.name));
+    next.ingredientCount = Number(next.ingredientCount || next.ingredientNames.length);
+    recipes[normalizedId] = next;
+    persist();
+    return next;
+  }
+
   return {
     catalog,
     getSearchIndex() {
@@ -236,6 +269,9 @@ function createStore() {
       ingredients[id] = next;
       persist();
       return next;
+    },
+    createRecipe(id, patch) {
+      return createRecipeRecord(id, patch);
     },
   };
 }

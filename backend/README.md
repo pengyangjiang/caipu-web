@@ -26,6 +26,7 @@ node backend/server.js
 - `POST /api/admin/logout`
 - `GET /api/search-index`
 - `GET /api/recipes`
+- `POST /api/recipes`
 - `GET /api/recipes/:id`
 - `PATCH /api/recipes/:id`
 - `GET /api/ingredients`

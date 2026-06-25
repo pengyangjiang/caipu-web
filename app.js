@@ -1,4 +1,4 @@
-﻿const catalog = window.recipeCatalog;
+const catalog = window.recipeCatalog;
 const api = window.contentApi;
 
 if (!catalog) {
@@ -25,6 +25,7 @@ const recipeGrid = document.getElementById("recipeGrid");
 const detailPanel = document.getElementById("detailPanel");
 const adminStatus = document.getElementById("adminStatus");
 const adminLogoutBtn = document.getElementById("adminLogoutBtn");
+const newRecipeLink = document.getElementById("newRecipeLink");
 
 document.title = "菜谱搜索页";
 
@@ -35,6 +36,7 @@ async function renderAdminStatus() {
   if (session.isAdmin) {
     adminStatus.textContent = session.checkedRemote ? "当前已登录管理员" : "已保存登录信息";
     if (adminLogoutBtn) adminLogoutBtn.style.display = "inline-flex";
+    if (newRecipeLink) newRecipeLink.hidden = false;
     return;
   }
 
@@ -42,6 +44,15 @@ async function renderAdminStatus() {
     ? "已保存登录信息，待验证"
     : "未登录管理员";
   if (adminLogoutBtn) adminLogoutBtn.style.display = session.hasToken ? "inline-flex" : "none";
+  if (newRecipeLink) newRecipeLink.hidden = true;
+}
+
+async function syncRecipeCatalog() {
+  if (!api?.listRecipes) return;
+  const remoteList = await api.listRecipes();
+  if (Array.isArray(remoteList) && remoteList.length > 0) {
+    api.mergeCatalogRecipes(catalog, remoteList);
+  }
 }
 
 function renderEmpty(message) {
@@ -537,8 +548,11 @@ fridgeIngredientsInput.addEventListener("input", () => {
   renderAll();
 });
 
-renderAll();
-renderAdminStatus();
+(async function init() {
+  await syncRecipeCatalog();
+  await renderAdminStatus();
+  renderAll();
+})();
 
 recipeGrid.addEventListener("click", (event) => {
   const card = event.target.closest("[data-recipe-id]");

@@ -1,4 +1,4 @@
-﻿const catalog = window.recipeCatalog;
+const catalog = window.recipeCatalog;
 const contentApi = window.contentApi;
 
 if (!catalog || !contentApi) {
@@ -607,6 +607,9 @@ function renderHeaderActions(recipe) {
   const { prevId, nextId } = getAdjacentRecipeIds(recipe.id);
   const favoriteActive = isFavorited(recipe.id);
   const editLink = contentApi.canEdit() ? contentApi.getEditLink("recipe", recipe.id) : "";
+  const newRecipeLink = contentApi.canEdit() && contentApi.getNewRecipeLink
+    ? contentApi.getNewRecipeLink()
+    : "";
   const loginLink = `./login.html?returnTo=${encodeURIComponent(window.location.href)}`;
   const logoutButton = contentApi.isAdminMode()
     ? `<button class="action-link" type="button" id="recipeLogoutBtn">退出登录</button>`
@@ -617,6 +620,7 @@ function renderHeaderActions(recipe) {
     <a class="action-link" href="./recipe.html?id=${encodeURIComponent(nextId)}">下一个 →</a>
     <a class="action-link" href="./shopping.html">购物清单</a>
     ${editLink ? `<a class="action-link" href="${editLink}">编辑</a>` : ""}
+    ${newRecipeLink ? `<a class="action-link" href="${newRecipeLink}">新建菜谱</a>` : ""}
     ${logoutButton}
     <button class="favorite-button ${favoriteActive ? "is-active" : ""}" type="button" data-favorite-id="${recipe.id}">
       ${favoriteActive ? "♥ 已收藏" : "♡ 收藏"}
@@ -741,6 +745,13 @@ function syncCoverImageState(recipe) {
 }
 
 (async function init() {
+  if (contentApi?.listRecipes) {
+    const remoteList = await contentApi.listRecipes();
+    if (Array.isArray(remoteList) && remoteList.length > 0) {
+      contentApi.mergeCatalogRecipes(catalog, remoteList);
+    }
+  }
+
   const recipe = await contentApi.loadContent("recipe", getRecipeIdFromQuery());
   await renderAdminState();
   renderRecipeDetail(recipe);
