@@ -316,6 +316,9 @@ function formatAiError(error) {
   if (/privacy mode.*legacy/i.test(message)) {
     return "当前为 Privacy Mode (Legacy)，不支持 Cloud Agents API。请在 Cursor 设置中切换为新版 Privacy Mode 后重试。";
   }
+  if (/model.*not available|invalid model/i.test(message)) {
+    return "当前 Cursor 账号不支持所选 AI 模型。已改为使用账号默认模型；若仍失败，请在 Cloudflare 环境变量中设置 CURSOR_MODEL_ID（可用 GET https://api.cursor.com/v1/models 查看可用 ID）。";
+  }
   return message || "AI 生成失败";
 }
 

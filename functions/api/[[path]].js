@@ -369,7 +369,9 @@ async function handleGenerateRecipeStart(request, env) {
   }
 
   try {
-    const started = await startRecipeGeneration(apiKey, name, id);
+    const started = await startRecipeGeneration(apiKey, name, id, {
+      modelId: env.CURSOR_MODEL_ID,
+    });
     return ok({ ...started, name, id }, 202);
   } catch (error) {
     if (error.code === 'CURSOR_NOT_CONFIGURED') {

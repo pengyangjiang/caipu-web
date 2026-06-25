@@ -2,3 +2,5 @@
 ADMIN_PASSWORD=your-admin-password
 ADMIN_TOKEN=your-long-random-token-at-least-32-chars
 CURSOR_API_KEY=your-cursor-api-key
+# 可选：指定 AI 模型 ID；留空则使用 Cursor 账号默认模型
+# CURSOR_MODEL_ID=composer-2

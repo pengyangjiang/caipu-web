@@ -113,16 +113,23 @@ async function cursorRequest(apiKey, path, options = {}) {
   return payload;
 }
 
-export async function startRecipeGeneration(apiKey, name, id) {
+function buildAgentCreateBody(name, id, modelId) {
+  const body = {
+    prompt: { text: buildRecipePrompt(name, id) },
+  };
+
+  const normalizedModelId = String(modelId || '').trim();
+  if (normalizedModelId) {
+    body.model = { id: normalizedModelId };
+  }
+
+  return body;
+}
+
+export async function startRecipeGeneration(apiKey, name, id, options = {}) {
   const payload = await cursorRequest(apiKey, '/v1/agents', {
     method: 'POST',
-    body: JSON.stringify({
-      prompt: { text: buildRecipePrompt(name, id) },
-      model: {
-        id: 'composer-2',
-        params: [{ id: 'fast', value: 'true' }],
-      },
-    }),
+    body: JSON.stringify(buildAgentCreateBody(name, id, options.modelId)),
   });
 
   const agentId = payload?.agent?.id;

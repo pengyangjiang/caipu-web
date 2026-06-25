@@ -298,7 +298,9 @@ async function handleGenerateRecipeStart(req, res) {
 
   try {
     const { startRecipeGeneration } = await cursorRecipePromise;
-    const started = await startRecipeGeneration(apiKey, name, id);
+    const started = await startRecipeGeneration(apiKey, name, id, {
+      modelId: process.env.CURSOR_MODEL_ID,
+    });
     ok(res, { ...started, name, id }, 202);
   } catch (error) {
     sendJson(res, 502, { ok: false, error: { code: 'GENERATION_FAILED', message: error.message || '无法启动 AI 生成' } });
