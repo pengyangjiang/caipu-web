@@ -1,0 +1,42 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>管理员登录</title>
+    <link rel="stylesheet" href="./style.css" />
+  </head>
+  <body>
+    <main class="page auth-page">
+      <section class="panel auth-shell">
+        <div class="auth-copy">
+          <p class="eyebrow">管理员登录</p>
+          <h1 class="page-title">登录后即可编辑菜谱和食材</h1>
+          <p class="page-desc">
+            使用后端的管理员口令登录。登录成功后会把 token 写入本地，编辑页就会显示保存按钮。
+          </p>
+        </div>
+
+        <form id="loginForm" class="auth-form">
+          <label class="edit-field">
+            <span>管理员密码</span>
+            <input id="passwordInput" type="password" placeholder="请输入管理员密码" autocomplete="current-password" />
+            <small>默认演示密码是 <code>admin123</code>，正式环境请更换。</small>
+          </label>
+
+          <div class="auth-actions">
+            <button class="favorite-button is-active" type="submit">登录</button>
+            <a class="action-link" href="./index.html">返回首页</a>
+          </div>
+
+          <p class="auth-status" id="loginStatus">等待输入密码</p>
+          <div class="auth-actions" id="sessionActions"></div>
+        </form>
+      </section>
+    </main>
+
+    <script src="./content-model.js"></script>
+    <script src="./api-client.js"></script>
+    <script src="./login.js"></script>
+  </body>
+</html>

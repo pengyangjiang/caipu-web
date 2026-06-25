@@ -1,0 +1,51 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>购物清单</title>
+    <link rel="stylesheet" href="./style.css" />
+  </head>
+  <body>
+    <main class="page shopping-page">
+      <header class="page-header">
+        <div class="page-header-left">
+          <a class="back-link" href="./index.html">← 返回首页</a>
+          <p class="page-breadcrumb">购物清单</p>
+          <h1 class="page-title shopping-page-title">把常买食材集中到一处</h1>
+          <p class="page-desc">
+            你可以从菜谱详情页一键加入，也可以手动补充。勾选后会保存在当前浏览器里，随时回来继续整理。
+          </p>
+        </div>
+        <div class="page-header-actions">
+          <a class="action-link" href="./index.html">去找菜谱</a>
+          <button class="action-link" type="button" id="clearPurchasedBtn">清空已购</button>
+          <button class="action-link" type="button" id="clearAllBtn">清空全部</button>
+        </div>
+      </header>
+
+      <section class="panel shopping-shell">
+        <div class="shopping-summary" id="shoppingSummary"></div>
+
+        <form class="shopping-form" id="shoppingForm">
+          <div class="shopping-form-grid">
+            <label class="shopping-field">
+              <span>食材名称</span>
+              <input id="shoppingName" type="text" placeholder="例如：鸡胸肉" autocomplete="off" required />
+            </label>
+            <label class="shopping-field">
+              <span>数量或备注</span>
+              <input id="shoppingAmount" type="text" placeholder="例如：2 个 / 200g" autocomplete="off" />
+            </label>
+          </div>
+          <button class="action-link shopping-submit" type="submit">添加到清单</button>
+        </form>
+
+        <div id="shoppingList"></div>
+      </section>
+    </main>
+
+    <script src="./ui-toast.js"></script>
+    <script src="./shopping.js"></script>
+  </body>
+</html>

@@ -1,0 +1,45 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>内容编辑</title>
+    <link rel="stylesheet" href="./style.css" />
+  </head>
+  <body>
+    <main class="page edit-page">
+      <header class="page-header">
+        <div class="page-header-left">
+          <a class="back-link" href="./index.html">← 返回搜索页</a>
+          <p class="page-breadcrumb" id="editBreadcrumb">内容编辑</p>
+        </div>
+        <div class="page-header-actions" id="editHeaderActions"></div>
+      </header>
+
+      <section class="panel edit-shell">
+        <div class="edit-summary">
+          <div>
+            <span class="eyebrow">内容编辑</span>
+            <h1 class="edit-title" id="editTitle">正在加载内容</h1>
+            <p class="edit-desc" id="editDesc">请稍候，编辑表单正在准备中。</p>
+          </div>
+          <div class="edit-status-card">
+            <p class="ingredient-info-title">保存状态</p>
+            <p class="edit-status" id="editStatus">加载中</p>
+            <p class="metric-sub" id="editModeHint">读取内容中</p>
+            <p class="edit-notice" id="editNotice"></p>
+          </div>
+        </div>
+
+        <form id="editForm" class="edit-form"></form>
+      </section>
+    </main>
+
+    <script src="./data.js"></script>
+    <script src="./recipe-details.js"></script>
+    <script src="./ingredient-details.js"></script>
+    <script src="./content-model.js"></script>
+    <script src="./api-client.js"></script>
+    <script src="./edit.js"></script>
+  </body>
+</html>

@@ -1,0 +1,89 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>菜谱搜索页</title>
+    <link rel="stylesheet" href="./style.css" />
+  </head>
+  <body>
+    <main class="page">
+      <section class="panel home-hero">
+        <div class="hero-copy">
+          <p class="eyebrow">今日吃什么</p>
+          <h1 class="page-title">先搜一搜，再决定午餐和晚餐</h1>
+          <p class="page-desc">
+            输入菜名、食材或口味，快速找到适合早餐、午餐、晚餐和减脂的菜谱，也可以直接把手头食材拿来搜。
+          </p>
+          <div class="search-hints" id="searchHints"></div>
+          <div class="hero-actions">
+            <a class="action-link" href="./login.html">管理员登录</a>
+            <a class="action-link" href="./shopping.html">购物清单</a>
+            <button class="action-link" type="button" id="adminLogoutBtn">退出登录</button>
+            <span class="admin-status" id="adminStatus">正在检查登录状态...</span>
+            <span class="search-tip">登录后可以编辑菜谱和食材内容</span>
+          </div>
+        </div>
+
+        <div class="search-shell">
+          <label class="search-bar" for="recipeSearch">
+            <span class="search-icon">⌕</span>
+            <input
+              id="recipeSearch"
+              type="search"
+              placeholder="搜索菜名、食材、口味，例如：鸡胸、番茄、减脂"
+              autocomplete="off"
+            />
+          </label>
+          <div class="category-row" id="categoryChips"></div>
+          <div class="search-meta">
+            <span id="resultCount"></span>
+            <span class="search-tip">点击卡片进入详情页，食材也能直接搜出可做菜品</span>
+          </div>
+          <div class="ingredient-search">
+            <div class="ingredient-search-head">
+              <span class="ingredient-search-title">我手里有这些食材</span>
+              <span class="ingredient-search-note">输入食材后，系统会按匹配度推荐可做菜品</span>
+            </div>
+            <div class="ingredient-search-bar">
+              <input
+                id="fridgeIngredients"
+                type="text"
+                placeholder="例如：鸡胸肉, 番茄, 鸡蛋"
+                autocomplete="off"
+              />
+              <button id="ingredientSearchBtn" type="button">按食材找菜</button>
+            </div>
+            <div class="ingredient-mode-row" id="ingredientModeChips"></div>
+            <div class="ingredient-chip-row" id="ingredientChips"></div>
+          </div>
+        </div>
+      </section>
+
+      <section class="panel section">
+        <div class="section-header">
+          <div>
+            <h2 class="section-title">推荐菜谱</h2>
+            <p class="section-note">支持搜索和分类筛选</p>
+          </div>
+        </div>
+        <div class="recipe-grid" id="recipeGrid"></div>
+      </section>
+
+      <section class="panel section">
+        <div class="section-header">
+          <div>
+            <h2 class="section-title">菜谱详情预览</h2>
+            <p class="section-note">选中任意菜谱后，这里会同步展示原材料、做法和热量</p>
+          </div>
+        </div>
+        <div id="detailPanel"></div>
+      </section>
+    </main>
+
+    <script src="./data.js"></script>
+    <script src="./content-model.js"></script>
+    <script src="./api-client.js"></script>
+    <script src="./app.js"></script>
+  </body>
+</html>
