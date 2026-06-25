@@ -15,6 +15,7 @@ node backend/server.js
 - `PORT`：服务端口，默认 `3000`
 - `ADMIN_PASSWORD`：管理员密码，默认 `admin123`
 - `ADMIN_TOKEN`：管理员令牌，默认 `demo-admin-token`
+- `CURSOR_API_KEY`：Cursor Cloud Agents API 密钥，用于新建菜谱页的「AI 自动生成」（在 [Cursor Dashboard → API Keys](https://cursor.com/dashboard) 创建）
 
 ## 接口
 
@@ -27,6 +28,8 @@ node backend/server.js
 - `GET /api/search-index`
 - `GET /api/recipes`
 - `POST /api/recipes`
+- `POST /api/recipes/generate`（管理员，需 `CURSOR_API_KEY`）
+- `GET /api/recipes/generate/status`（管理员，轮询 AI 生成状态）
 - `GET /api/recipes/:id`
 - `PATCH /api/recipes/:id`
 - `GET /api/ingredients`
@@ -78,6 +81,7 @@ npm run sync
 2. 在 Cloudflare 控制台 → Pages 项目 → **Settings → Environment variables** 中，为 **Production**（和 Preview，如需要）添加以下变量，并勾选 **Encrypt**（加密存储）：
    - `ADMIN_PASSWORD`：管理员登录密码（只存在 Cloudflare，不要写进代码仓库）
    - `ADMIN_TOKEN`：登录成功后返回的长随机令牌（建议 64 位十六进制，与密码不同）
+   - `CURSOR_API_KEY`：Cursor API 密钥，用于新建菜谱 AI 自动生成（可选，未配置时 AI 按钮会提示 503）
 3. 若需要在线保存编辑内容，在 Functions → KV namespace bindings 中绑定 `CONTENT_KV`。
    - 未绑定 KV 时，登录和读取正常，但 `PATCH` 保存会返回 503。
 4. 线上环境会自动使用当前域名作为 API 地址（见 `config.js`），无需再指向 `localhost:3000`。

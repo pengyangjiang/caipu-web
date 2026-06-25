@@ -1,3 +1,5 @@
+import { startRecipeGeneration, pollRecipeGeneration } from '../../shared/cursor-recipe.mjs';
+
 const CORS_HEADERS = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'Content-Type, Authorization, X-Admin-Token',
@@ -326,6 +328,74 @@ function getRoutePath(params) {
   return String(raw || '').replace(/^\/+|\/+$/g, '');
 }
 
+async function handleGenerateRecipeStart(request, env) {
+  if (!isAdmin(request, env)) {
+    return fail('FORBIDDEN', 'Admin permission required', 403);
+  }
+
+  const apiKey = env.CURSOR_API_KEY;
+  if (!apiKey) {
+    return fail('CURSOR_NOT_CONFIGURED', '请在环境变量中配置 CURSOR_API_KEY', 503);
+  }
+
+  let payload;
+  try {
+    payload = await request.json();
+  } catch {
+    return fail('BAD_REQUEST', 'Invalid JSON body', 400);
+  }
+
+  const name = String(payload?.name || '').trim();
+  const id = String(payload?.id || '').trim();
+  if (!name) {
+    return fail('BAD_REQUEST', '请提供菜名', 400);
+  }
+  if (!id || !/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(id)) {
+    return fail('BAD_REQUEST', '请提供合法菜谱 ID（小写字母、数字、连字符）', 400);
+  }
+
+  try {
+    const started = await startRecipeGeneration(apiKey, name, id);
+    return ok({ ...started, name, id }, 202);
+  } catch (error) {
+    if (error.code === 'CURSOR_NOT_CONFIGURED') {
+      return fail('CURSOR_NOT_CONFIGURED', error.message, 503);
+    }
+    return fail('GENERATION_FAILED', error.message || '无法启动 AI 生成', 502);
+  }
+}
+
+async function handleGenerateRecipeStatus(request, env) {
+  if (!isAdmin(request, env)) {
+    return fail('FORBIDDEN', 'Admin permission required', 403);
+  }
+
+  const apiKey = env.CURSOR_API_KEY;
+  if (!apiKey) {
+    return fail('CURSOR_NOT_CONFIGURED', '请在环境变量中配置 CURSOR_API_KEY', 503);
+  }
+
+  const url = new URL(request.url);
+  const agentId = String(url.searchParams.get('agentId') || '').trim();
+  const runId = String(url.searchParams.get('runId') || '').trim();
+  const name = String(url.searchParams.get('name') || '').trim();
+  const id = String(url.searchParams.get('id') || '').trim();
+
+  if (!agentId || !runId || !name || !id) {
+    return fail('BAD_REQUEST', '缺少 agentId、runId、name 或 id 参数', 400);
+  }
+
+  try {
+    const result = await pollRecipeGeneration(apiKey, agentId, runId, name, id);
+    return ok(result);
+  } catch (error) {
+    if (error.code === 'GENERATION_FAILED') {
+      return fail('GENERATION_FAILED', error.message, 502);
+    }
+    return fail('GENERATION_FAILED', error.message || '查询生成状态失败', 502);
+  }
+}
+
 export async function onRequest(context) {
   const { request, env, params } = context;
 
@@ -406,6 +476,14 @@ export async function onRequest(context) {
         recipes,
         ingredients,
       });
+    }
+
+    if (route === 'recipes/generate/status' && request.method === 'GET') {
+      return handleGenerateRecipeStatus(request, env);
+    }
+
+    if (route === 'recipes/generate' && request.method === 'POST') {
+      return handleGenerateRecipeStart(request, env);
     }
 
     if (route === 'recipes' && request.method === 'POST') {

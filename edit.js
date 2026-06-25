@@ -21,6 +21,7 @@ const state = {
   data: null,
   dirty: false,
   saving: false,
+  generating: false,
   canEdit: false,
 };
 
@@ -215,6 +216,12 @@ function renderRecipeEditor(recipe, isNew = false) {
         ${renderField("标签", "tags", (recipe.tags || []).join(", "), "逗号分隔")}
         ${renderField("状态标签", "statusTags", (recipe.statusTags || []).join(", "), "逗号分隔")}
       </div>
+      ${isNew ? `
+        <div class="edit-ai-row">
+          <button type="button" class="favorite-button" id="aiGenerateButton">AI 自动生成</button>
+          <small>填写 ID 和菜名后点击，AI 会填入表单内容，请检查后手动点「创建菜谱」保存</small>
+        </div>
+      ` : ""}
     </section>
 
     <section class="edit-section">
@@ -254,6 +261,88 @@ function renderRecipeEditor(recipe, isNew = false) {
       </div>
     </section>
   `;
+  bindAiGenerateButton();
+}
+
+function bindAiGenerateButton() {
+  const button = document.getElementById("aiGenerateButton");
+  if (!button || button.dataset.bound === "1") return;
+  button.dataset.bound = "1";
+  button.addEventListener("click", () => {
+    startAiGeneration();
+  });
+}
+
+function setAiGenerating(active, label = "AI 自动生成") {
+  const button = document.getElementById("aiGenerateButton");
+  if (button) {
+    button.disabled = active;
+    button.textContent = label;
+  }
+}
+
+async function pollAiGeneration(agentId, runId, name, id) {
+  const delay = (ms) => new Promise((resolve) => window.setTimeout(resolve, ms));
+
+  while (state.generating) {
+    const result = await api.pollRecipeGeneration(agentId, runId, name, id);
+    if (result?.status === "FINISHED" && result.recipe) {
+      state.data = { ...result.recipe, id };
+      renderRecipeEditor(state.data, true);
+      setDirty(true);
+      setNotice("AI 已生成内容，请检查后点击「创建菜谱」保存");
+      editStatus.textContent = "AI 生成完成，待保存";
+      return;
+    }
+
+    if (result?.status === "CREATING" || result?.status === "RUNNING") {
+      editStatus.textContent = `AI 生成中（${result.status}）...`;
+      await delay(3000);
+      continue;
+    }
+
+    throw new Error(`AI 生成失败：${result?.status || "未知状态"}`);
+  }
+}
+
+async function startAiGeneration() {
+  if (!state.isNew || state.generating || !api.startRecipeGeneration) return;
+
+  const formData = new FormData(editForm);
+  const id = String(formData.get("id") || "").trim();
+  const name = String(formData.get("name") || "").trim();
+
+  if (!name) {
+    setNotice("请先填写菜名", "error");
+    return;
+  }
+  if (!id || !/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(id)) {
+    setNotice("请先填写合法菜谱 ID（小写字母、数字、连字符）", "error");
+    return;
+  }
+
+  state.generating = true;
+  setAiGenerating(true, "正在生成...");
+  setNotice("正在启动 AI 生成，请稍候...");
+  editStatus.textContent = "AI 生成中";
+
+  try {
+    const started = await api.startRecipeGeneration(name, id);
+    if (!started?.agentId || !started?.runId) {
+      throw new Error("服务器未返回生成任务信息");
+    }
+    await pollAiGeneration(started.agentId, started.runId, name, id);
+  } catch (error) {
+    console.error(error);
+    const message = error?.code === "CURSOR_NOT_CONFIGURED"
+      ? "服务器未配置 CURSOR_API_KEY，无法使用 AI 生成"
+      : (error?.message || "AI 生成失败");
+    setNotice(message, "error");
+    editStatus.textContent = "AI 生成失败";
+  } finally {
+    state.generating = false;
+    setAiGenerating(false);
+  }
 }
 
 function renderIngredientEditor(ingredient) {

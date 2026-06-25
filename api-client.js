@@ -261,6 +261,26 @@
     return normalized;
   }
 
+  async function startRecipeGeneration(name, id) {
+    return unwrapResponse(await request('/api/recipes/generate', {
+      method: 'POST',
+      body: JSON.stringify({
+        name: String(name || '').trim(),
+        id: String(id || '').trim(),
+      }),
+    }));
+  }
+
+  async function pollRecipeGeneration(agentId, runId, name, id) {
+    const qs = new URLSearchParams({
+      agentId: String(agentId || '').trim(),
+      runId: String(runId || '').trim(),
+      name: String(name || '').trim(),
+      id: String(id || '').trim(),
+    });
+    return unwrapResponse(await request(`/api/recipes/generate/status?${qs}`));
+  }
+
   async function listRecipes() {
     if (hasRemote) {
       try {
@@ -369,6 +389,8 @@
     loadContent,
     saveContent,
     createContent,
+    startRecipeGeneration,
+    pollRecipeGeneration,
     listRecipes,
     mergeCatalogRecipes,
     getLastSaveTarget,

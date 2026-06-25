@@ -1980,6 +1980,19 @@ input {
   margin-bottom: 0;
 }
 
+.edit-ai-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px;
+  margin-top: 16px;
+}
+
+.edit-ai-row small {
+  color: var(--muted);
+  line-height: 1.6;
+}
+
 @media (max-width: 1040px) {
   .home-hero,
   .detail-layout {
