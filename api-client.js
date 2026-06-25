@@ -76,8 +76,11 @@
     });
 
     if (!response.ok) {
-      const error = new Error(`Request failed: ${response.status}`);
+      const payload = await response.json().catch(() => null);
+      const message = payload?.error?.message || `Request failed: ${response.status}`;
+      const error = new Error(message);
       error.status = response.status;
+      error.code = payload?.error?.code || null;
       throw error;
     }
 
@@ -105,9 +108,14 @@
   }
 
   let lastSaveTarget = 'local';
+  let lastSaveFailure = '';
 
   function getLastSaveTarget() {
     return lastSaveTarget;
+  }
+
+  function getLastSaveFailure() {
+    return lastSaveFailure;
   }
 
   async function loadContent(type, id) {
@@ -145,6 +153,7 @@
     });
 
     lastSaveTarget = 'local';
+    lastSaveFailure = '';
 
     if (hasRemote) {
       try {
@@ -157,7 +166,16 @@
         }));
         lastSaveTarget = 'remote';
         return model.normalize(type, data || normalized);
-      } catch {
+      } catch (error) {
+        if (error.code === 'KV_NOT_CONFIGURED') {
+          lastSaveFailure = '服务器未配置 CONTENT_KV，无法在线持久化保存';
+        } else if (error.code === 'VERSION_CONFLICT') {
+          lastSaveFailure = '内容已被其他人修改，请刷新后重试';
+        } else if (error.status === 403) {
+          lastSaveFailure = '管理员权限失效，请重新登录';
+        } else {
+          lastSaveFailure = error.message || '服务器保存失败';
+        }
         // fall through to local draft persistence
       }
     }
@@ -248,6 +266,7 @@
     loadContent,
     saveContent,
     getLastSaveTarget,
+    getLastSaveFailure,
     isRemoteConfigured,
     getEditLink,
     getModeLabel,

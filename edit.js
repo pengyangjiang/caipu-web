@@ -342,9 +342,12 @@ async function saveCurrentForm() {
     const saved = await api.saveContent(state.type, state.id, payload);
     state.data = saved;
     const savedTo = api.getLastSaveTarget?.() || (api.isRemoteConfigured() ? 'remote' : 'local');
+    const saveFailure = api.getLastSaveFailure?.() || '';
     const successText = savedTo === 'remote'
       ? '已保存到后端'
-      : '已保存到本机草稿（未写入服务器，换设备会丢失）';
+      : saveFailure
+        ? `已保存到本机草稿：${saveFailure}`
+        : '已保存到本机草稿（未写入服务器，换设备会丢失）';
     editStatus.textContent = successText;
     setNotice(`${successText}，正在返回详情页...`);
     setDirty(false);
