@@ -10,6 +10,9 @@ const state = {
   ingredientQuery: "",
   ingredientMode: "all",
   category: "all",
+  searchMode: "recipe",
+  ingredientChipsExpanded: false,
+  previewOpen: false,
   selectedId: catalog.defaultRecipeId,
 };
 
@@ -20,12 +23,23 @@ const searchHints = document.getElementById("searchHints");
 const categoryChips = document.getElementById("categoryChips");
 const ingredientModeChips = document.getElementById("ingredientModeChips");
 const ingredientChips = document.getElementById("ingredientChips");
+const ingredientMoreBtn = document.getElementById("ingredientMoreBtn");
 const resultCount = document.getElementById("resultCount");
+const ingredientResultCount = document.getElementById("ingredientResultCount");
 const recipeGrid = document.getElementById("recipeGrid");
 const detailPanel = document.getElementById("detailPanel");
+const previewSection = document.getElementById("previewSection");
+const closePreviewBtn = document.getElementById("closePreviewBtn");
 const adminStatus = document.getElementById("adminStatus");
+const adminLoginLink = document.getElementById("adminLoginLink");
 const adminLogoutBtn = document.getElementById("adminLogoutBtn");
 const newRecipeLink = document.getElementById("newRecipeLink");
+const adminMenu = document.getElementById("adminMenu");
+const searchModeTabs = document.getElementById("searchModeTabs");
+const recipeSearchPanel = document.getElementById("recipeSearchPanel");
+const ingredientSearchPanel = document.getElementById("ingredientSearchPanel");
+
+const INGREDIENT_CHIP_LIMIT = 6;
 
 document.title = "菜谱搜索页";
 
@@ -35,15 +49,17 @@ async function renderAdminStatus() {
   const session = await api.getSessionStatus();
   if (session.isAdmin) {
     adminStatus.textContent = session.checkedRemote ? "当前已登录管理员" : "已保存登录信息";
-    if (adminLogoutBtn) adminLogoutBtn.style.display = "inline-flex";
+    if (adminLoginLink) adminLoginLink.hidden = true;
+    if (adminLogoutBtn) adminLogoutBtn.hidden = false;
     if (newRecipeLink) newRecipeLink.hidden = false;
     return;
   }
 
   adminStatus.textContent = session.hasToken
     ? "已保存登录信息，待验证"
-    : "未登录管理员";
-  if (adminLogoutBtn) adminLogoutBtn.style.display = session.hasToken ? "inline-flex" : "none";
+    : "未登录，登录后可编辑内容";
+  if (adminLoginLink) adminLoginLink.hidden = false;
+  if (adminLogoutBtn) adminLogoutBtn.hidden = true;
   if (newRecipeLink) newRecipeLink.hidden = true;
 }
 
@@ -107,7 +123,15 @@ function getRecipeById(id) {
 }
 
 function getUniqueIngredientNames() {
-  return catalog.ingredients.map((ingredient) => ingredient.name).slice(0, 12);
+  return catalog.ingredients.map((ingredient) => ingredient.name);
+}
+
+function getVisibleIngredientNames() {
+  const names = getUniqueIngredientNames();
+  if (state.ingredientChipsExpanded || names.length <= INGREDIENT_CHIP_LIMIT) {
+    return names;
+  }
+  return names.slice(0, INGREDIENT_CHIP_LIMIT);
 }
 
 function getRecipeSearchText(recipe) {
@@ -204,11 +228,33 @@ function getFilteredRecipes() {
     });
 }
 
+function renderSearchModeTabs() {
+  if (!searchModeTabs) return;
+
+  searchModeTabs.querySelectorAll("[data-search-mode]").forEach((button) => {
+    const active = button.dataset.searchMode === state.searchMode;
+    button.classList.toggle("active", active);
+    button.setAttribute("aria-selected", active ? "true" : "false");
+  });
+
+  if (recipeSearchPanel) {
+    recipeSearchPanel.hidden = state.searchMode !== "recipe";
+  }
+  if (ingredientSearchPanel) {
+    ingredientSearchPanel.hidden = state.searchMode !== "ingredient";
+  }
+}
+
 function renderSearchHints() {
-  searchHints.innerHTML = renderList(
-    catalog.searchHints,
-    (hint) => `<button class="hint-chip" type="button" data-hint="${hint}">${hint}</button>`
-  );
+  if (!searchHints) return;
+
+  searchHints.innerHTML = `
+    <span class="search-hints-label">热门：</span>
+    ${renderList(
+      catalog.searchHints,
+      (hint) => `<button class="hint-chip hint-chip-light" type="button" data-hint="${hint}">${hint}</button>`,
+    )}
+  `;
 }
 
 function renderCategoryChips() {
@@ -218,7 +264,7 @@ function renderCategoryChips() {
       <button class="category-chip ${state.category === category.id ? "active" : ""}" type="button" data-category="${category.id}">
         ${category.label}
       </button>
-    `
+    `,
   );
 }
 
@@ -235,26 +281,63 @@ function renderIngredientModeChips() {
       <button class="ingredient-mode-chip ${state.ingredientMode === mode.id ? "active" : ""}" type="button" data-mode="${mode.id}">
         ${mode.label}
       </button>
-    `
+    `,
   );
 }
 
 function renderIngredientChips() {
   const selectedTokens = new Set(getIngredientTokens());
+  const visibleNames = getVisibleIngredientNames();
+  const totalNames = getUniqueIngredientNames().length;
+
   ingredientChips.innerHTML = renderList(
-    getUniqueIngredientNames(),
+    visibleNames,
     (name) => `
       <button class="ingredient-chip ${selectedTokens.has(normalizeText(name)) ? "active" : ""}" type="button" data-ingredient="${name}">
         ${name}
       </button>
-    `
+    `,
+  );
+
+  if (ingredientMoreBtn) {
+    const canExpand = totalNames > INGREDIENT_CHIP_LIMIT;
+    ingredientMoreBtn.hidden = !canExpand;
+    ingredientMoreBtn.textContent = state.ingredientChipsExpanded
+      ? "收起食材"
+      : `更多食材（${totalNames - INGREDIENT_CHIP_LIMIT}+）`;
+  }
+}
+
+function renderResultCounts(filtered) {
+  const ingredientTokens = getIngredientTokens();
+  const countText = ingredientTokens.length > 0
+    ? `找到 ${filtered.length} 个菜谱，已输入 ${ingredientTokens.length} 个食材`
+    : `找到 ${filtered.length} 个菜谱`;
+
+  if (resultCount) resultCount.textContent = countText;
+  if (ingredientResultCount) ingredientResultCount.textContent = countText;
+}
+
+function renderPreviewSection(filtered) {
+  if (!previewSection) return;
+
+  previewSection.hidden = !state.previewOpen;
+  if (!state.previewOpen) {
+    if (detailPanel) detailPanel.innerHTML = "";
+    return;
+  }
+
+  const selectedResult = filtered.find((item) => item.recipe.id === state.selectedId);
+  renderDetail(
+    selectedResult ? selectedResult.recipe : null,
+    selectedResult ? selectedResult.ingredientMatch : null,
   );
 }
 
 function renderRecipeCard(result) {
   const recipe = result.recipe || result;
   const match = result.ingredientMatch || null;
-  const active = recipe.id === state.selectedId ? "active" : "";
+  const active = state.previewOpen && recipe.id === state.selectedId ? "active" : "";
 
   return `
     <div class="recipe-card ${active}" role="button" tabindex="0" data-recipe-id="${recipe.id}" aria-label="预览 ${recipe.name}">
@@ -272,7 +355,7 @@ function renderRecipeCard(result) {
           <span>${recipe.statusTags[0]}</span>
           <span>${recipe.summary[0].value}</span>
           ${
-            match
+            match && match.matchedCount > 0
               ? `<span class="recipe-match-badge">${match.direct ? "可直接做" : `食材匹配 ${match.matchedCount}/${match.totalCount}`}</span>`
               : ""
           }
@@ -343,7 +426,6 @@ function renderDetail(recipe, ingredientMatch = null) {
           </div>
           <h3 class="detail-title">${recipe.name}</h3>
           <p class="detail-desc">${recipe.desc}</p>
-          <p class="preview-note">左侧是封面预览和摘要，右侧是匹配、热量和常用食材。</p>
         </div>
         <div class="summary-grid">
           ${renderList(
@@ -353,7 +435,7 @@ function renderDetail(recipe, ingredientMatch = null) {
                 <p class="summary-label">${item.label}</p>
                 <p class="summary-value">${item.value}</p>
               </article>
-            `
+            `,
           )}
         </div>
       </section>
@@ -361,10 +443,9 @@ function renderDetail(recipe, ingredientMatch = null) {
       <section class="detail-content">
         <div class="detail-preview-header">
           <div>
-            <p class="detail-preview-kicker">右侧信息面板</p>
             <h4 class="detail-subtitle">菜谱摘要</h4>
           </div>
-          <span class="section-note">快速看热量、匹配度和常用食材</span>
+          <a class="action-link" href="./recipe.html?id=${encodeURIComponent(recipe.id)}">查看完整详情</a>
         </div>
 
         <section class="preview-panel preview-panel-stats">
@@ -385,10 +466,6 @@ function renderDetail(recipe, ingredientMatch = null) {
               <p class="metric-label">每份热量</p>
               <p class="metric-value">${recipe.calories.perServing}</p>
             </article>
-            <article class="metric">
-              <p class="metric-label">详情页</p>
-              <p class="metric-value">完整</p>
-            </article>
           </div>
 
           <article class="calorie-banner">
@@ -399,7 +476,7 @@ function renderDetail(recipe, ingredientMatch = null) {
         </section>
 
         ${
-          ingredientMatch
+          ingredientMatch && ingredientMatch.matchedCount > 0
             ? `
           <section class="preview-panel">
             <div class="detail-subtitle-row">
@@ -449,7 +526,7 @@ function renderDetail(recipe, ingredientMatch = null) {
                 return link
                   ? `<a class="ingredient-chip ingredient-link" href="${link}">${name}</a>`
                   : `<span class="ingredient-chip">${name}</span>`;
-              }
+              },
             )}
           </div>
         </section>
@@ -460,28 +537,36 @@ function renderDetail(recipe, ingredientMatch = null) {
   syncPreviewCoverState(recipe);
 }
 
+function openPreview(recipeId) {
+  state.selectedId = recipeId;
+  state.previewOpen = true;
+  renderAll();
+  if (previewSection) {
+    previewSection.scrollIntoView({ behavior: "smooth", block: "nearest" });
+  }
+}
+
+function closePreview() {
+  state.previewOpen = false;
+  renderAll();
+}
+
 function renderAll() {
   const filtered = getFilteredRecipes();
-  const selectedStillVisible = filtered.some((item) => item.recipe.id === state.selectedId);
 
-  if (filtered.length > 0 && !selectedStillVisible) {
+  if (filtered.length > 0 && !filtered.some((item) => item.recipe.id === state.selectedId)) {
     state.selectedId = filtered[0].recipe.id;
   }
 
+  renderSearchModeTabs();
   renderSearchHints();
   renderCategoryChips();
   renderIngredientModeChips();
   renderIngredientChips();
   renderRecipeGrid(filtered);
   syncRecipeCardCovers();
-
-  const selectedResult = filtered.find((item) => item.recipe.id === state.selectedId);
-  renderDetail(filtered.length > 0 ? selectedResult.recipe : null, selectedResult ? selectedResult.ingredientMatch : null);
-
-  const ingredientTokens = getIngredientTokens();
-  resultCount.textContent = ingredientTokens.length > 0
-    ? `找到 ${filtered.length} 个菜谱，已输入 ${ingredientTokens.length} 个食材`
-    : `找到 ${filtered.length} 个菜谱`;
+  renderResultCounts(filtered);
+  renderPreviewSection(filtered);
 }
 
 searchInput.addEventListener("input", (event) => {
@@ -503,6 +588,15 @@ searchHints.addEventListener("click", (event) => {
   searchInput.value = state.query;
   renderAll();
 });
+
+if (searchModeTabs) {
+  searchModeTabs.addEventListener("click", (event) => {
+    const button = event.target.closest("[data-search-mode]");
+    if (!button) return;
+    state.searchMode = button.dataset.searchMode || "recipe";
+    renderAll();
+  });
+}
 
 ingredientModeChips.addEventListener("click", (event) => {
   const button = event.target.closest("[data-mode]");
@@ -530,6 +624,13 @@ ingredientChips.addEventListener("click", (event) => {
   renderAll();
 });
 
+if (ingredientMoreBtn) {
+  ingredientMoreBtn.addEventListener("click", () => {
+    state.ingredientChipsExpanded = !state.ingredientChipsExpanded;
+    renderIngredientChips();
+  });
+}
+
 function applyIngredientSearch() {
   state.ingredientQuery = fridgeIngredientsInput.value;
   renderAll();
@@ -548,6 +649,10 @@ fridgeIngredientsInput.addEventListener("input", () => {
   renderAll();
 });
 
+if (closePreviewBtn) {
+  closePreviewBtn.addEventListener("click", closePreview);
+}
+
 (async function init() {
   await syncRecipeCatalog();
   await renderAdminStatus();
@@ -555,14 +660,12 @@ fridgeIngredientsInput.addEventListener("input", () => {
 })();
 
 recipeGrid.addEventListener("click", (event) => {
+  if (event.target.closest(".recipe-card-cover-link")) return;
+
   const card = event.target.closest("[data-recipe-id]");
   if (!card) return;
 
-  const nextSelectedId = card.dataset.recipeId;
-  if (!nextSelectedId || nextSelectedId === state.selectedId) return;
-
-  state.selectedId = nextSelectedId;
-  renderAll();
+  openPreview(card.dataset.recipeId);
 });
 
 recipeGrid.addEventListener("keydown", (event) => {
@@ -573,16 +676,13 @@ recipeGrid.addEventListener("keydown", (event) => {
   if (key !== "enter" && key !== " ") return;
 
   event.preventDefault();
-  const nextSelectedId = card.dataset.recipeId;
-  if (!nextSelectedId || nextSelectedId === state.selectedId) return;
-
-  state.selectedId = nextSelectedId;
-  renderAll();
+  openPreview(card.dataset.recipeId);
 });
 
 if (adminLogoutBtn && api) {
   adminLogoutBtn.addEventListener("click", () => {
     api.clearAdminSession();
+    if (adminMenu) adminMenu.open = false;
     renderAdminStatus();
   });
 }

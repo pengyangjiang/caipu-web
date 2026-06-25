@@ -10,45 +10,63 @@
   </head>
   <body>
     <main class="page">
+      <header class="site-nav">
+        <a class="site-brand" href="./index.html">
+          <img class="site-brand-icon" src="./favicon.svg" width="22" height="22" alt="" />
+          <span>菜谱图谱</span>
+        </a>
+        <nav class="site-nav-links" aria-label="站点导航">
+          <a class="site-nav-link" href="./recipes.html">全部菜品</a>
+          <a class="site-nav-link" href="./ingredients.html">全部食材</a>
+          <a class="site-nav-link" href="./shopping.html">购物清单</a>
+        </nav>
+        <details class="admin-menu" id="adminMenu">
+          <summary class="admin-menu-trigger">管理员</summary>
+          <div class="admin-menu-panel">
+            <p class="admin-menu-status" id="adminStatus">正在检查登录状态...</p>
+            <a class="admin-menu-item" href="./login.html" id="adminLoginLink">登录</a>
+            <a class="admin-menu-item" href="./edit.html?type=recipe&new=1" id="newRecipeLink" hidden>新建菜谱</a>
+            <button class="admin-menu-item" type="button" id="adminLogoutBtn" hidden>退出登录</button>
+          </div>
+        </details>
+      </header>
+
       <section class="panel home-hero">
         <div class="hero-copy">
           <p class="eyebrow">今日吃什么</p>
           <h1 class="page-title">先搜一搜，再决定午餐和晚餐</h1>
           <p class="page-desc">
-            输入菜名、食材或口味，快速找到适合早餐、午餐、晚餐和减脂的菜谱，也可以直接把手头食材拿来搜。
+            输入菜名、食材或口味，快速找到适合早餐、午餐、晚餐和减脂的菜谱。
           </p>
-          <div class="search-hints" id="searchHints"></div>
-          <div class="hero-actions">
-            <a class="action-link" href="./login.html">管理员登录</a>
-            <a class="action-link" href="./edit.html?type=recipe&new=1" id="newRecipeLink" hidden>新建菜谱</a>
-            <a class="action-link" href="./recipes.html">全部菜品</a>
-            <a class="action-link" href="./ingredients.html">全部食材</a>
-            <a class="action-link" href="./shopping.html">购物清单</a>
-            <button class="action-link" type="button" id="adminLogoutBtn">退出登录</button>
-            <span class="admin-status" id="adminStatus">正在检查登录状态...</span>
-            <span class="search-tip">登录后可以编辑菜谱和食材内容</span>
-          </div>
         </div>
 
         <div class="search-shell">
-          <label class="search-bar" for="recipeSearch">
-            <span class="search-icon">⌕</span>
-            <input
-              id="recipeSearch"
-              type="search"
-              placeholder="搜索菜名、食材、口味，例如：鸡胸、番茄、减脂"
-              autocomplete="off"
-            />
-          </label>
-          <div class="category-row" id="categoryChips"></div>
-          <div class="search-meta">
-            <span id="resultCount"></span>
-            <span class="search-tip">点击卡片进入详情页，食材也能直接搜出可做菜品</span>
+          <div class="search-mode-tabs" id="searchModeTabs" role="tablist" aria-label="搜索模式">
+            <button class="search-mode-tab active" type="button" role="tab" aria-selected="true" data-search-mode="recipe">搜菜名</button>
+            <button class="search-mode-tab" type="button" role="tab" aria-selected="false" data-search-mode="ingredient">按食材</button>
           </div>
-          <div class="ingredient-search">
+
+          <div class="search-mode-panel" id="recipeSearchPanel" role="tabpanel">
+            <label class="search-bar" for="recipeSearch">
+              <span class="search-icon">⌕</span>
+              <input
+                id="recipeSearch"
+                type="search"
+                placeholder="搜索菜名、食材、口味，例如：鸡胸、番茄、减脂"
+                autocomplete="off"
+              />
+            </label>
+            <div class="search-hints search-hints-inline" id="searchHints"></div>
+            <div class="category-row" id="categoryChips"></div>
+            <div class="search-meta">
+              <span id="resultCount"></span>
+            </div>
+          </div>
+
+          <div class="search-mode-panel" id="ingredientSearchPanel" role="tabpanel" hidden>
             <div class="ingredient-search-head">
               <span class="ingredient-search-title">我手里有这些食材</span>
-              <span class="ingredient-search-note">输入食材后，系统会按匹配度推荐可做菜品</span>
+              <span class="ingredient-search-note">输入后按匹配度推荐可做菜品</span>
             </div>
             <div class="ingredient-search-bar">
               <input
@@ -61,6 +79,10 @@
             </div>
             <div class="ingredient-mode-row" id="ingredientModeChips"></div>
             <div class="ingredient-chip-row" id="ingredientChips"></div>
+            <button class="ingredient-more-btn" type="button" id="ingredientMoreBtn" hidden>更多食材</button>
+            <div class="search-meta">
+              <span id="ingredientResultCount"></span>
+            </div>
           </div>
         </div>
       </section>
@@ -69,18 +91,19 @@
         <div class="section-header">
           <div>
             <h2 class="section-title">推荐菜谱</h2>
-            <p class="section-note">支持搜索和分类筛选</p>
+            <p class="section-note">点击卡片可预览摘要，或进入完整详情页</p>
           </div>
         </div>
         <div class="recipe-grid" id="recipeGrid"></div>
       </section>
 
-      <section class="panel section">
+      <section class="panel section home-preview-section" id="previewSection" hidden>
         <div class="section-header">
           <div>
             <h2 class="section-title">菜谱详情预览</h2>
-            <p class="section-note">选中任意菜谱后，这里会同步展示原材料、做法和热量</p>
+            <p class="section-note">快速查看热量、匹配度和常用食材</p>
           </div>
+          <button class="action-link" type="button" id="closePreviewBtn">收起预览</button>
         </div>
         <div id="detailPanel"></div>
       </section>
