@@ -171,6 +171,7 @@
 
   let lastSaveTarget = 'local';
   let lastSaveFailure = '';
+  let lastIngredientSync = null;
 
   function getLastSaveTarget() {
     return lastSaveTarget;
@@ -178,6 +179,46 @@
 
   function getLastSaveFailure() {
     return lastSaveFailure;
+  }
+
+  function getLastIngredientSync() {
+    return lastIngredientSync;
+  }
+
+  function pickIngredientListItem(ingredient) {
+    const normalized = model.normalize('ingredient', ingredient);
+    return {
+      id: normalized.id,
+      name: normalized.name,
+      aliases: normalized.aliases,
+      category: normalized.category,
+      unit: normalized.unit,
+      caloriesPer100g: normalized.caloriesPer100g,
+      nutritionPer100g: normalized.nutritionPer100g,
+    };
+  }
+
+  function upsertLocalIngredients(catalogItems) {
+    if (!Array.isArray(catalogItems) || !catalogItems.length) {
+      return { created: [], updated: [], skipped: [] };
+    }
+
+    if (!window.ingredientSync?.upsertIngredientCatalog) {
+      return { created: [], updated: [], skipped: catalogItems.map((item) => item?.name || 'unknown') };
+    }
+
+    const map = getSourceMap('ingredient');
+    const result = window.ingredientSync.upsertIngredientCatalog(
+      map,
+      catalogItems,
+      (item) => model.normalize('ingredient', item),
+    );
+
+    if (window.recipeCatalog) {
+      mergeCatalogIngredients(window.recipeCatalog, Object.values(map));
+    }
+
+    return result;
   }
 
   async function loadContent(type, id) {
@@ -262,8 +303,13 @@
     }
 
     const normalizedId = String(id || '').trim();
+    const stripFn = window.ingredientSync?.stripIngredientCatalog;
+    const { recipePayload, ingredientCatalog } = stripFn
+      ? stripFn(payload)
+      : { recipePayload: payload, ingredientCatalog: [] };
+
     const normalized = model.normalize(type, {
-      ...payload,
+      ...recipePayload,
       id: normalizedId,
       version: 1,
       updatedAt: model.now(),
@@ -271,15 +317,30 @@
 
     lastSaveTarget = 'local';
     lastSaveFailure = '';
+    lastIngredientSync = null;
 
     if (hasRemote) {
       try {
-        const data = unwrapResponse(await request('/api/recipes', {
+        const response = unwrapResponse(await request('/api/recipes', {
           method: 'POST',
-          body: JSON.stringify({ ...normalized, id: normalizedId }),
+          body: JSON.stringify({ ...normalized, id: normalizedId, ingredientCatalog }),
         }));
         lastSaveTarget = 'remote';
-        return model.normalize(type, data || normalized);
+        const recipe = model.normalize(type, response?.recipe || response);
+        lastIngredientSync = response?.ingredientSync || null;
+        if (ingredientCatalog.length) {
+          upsertLocalIngredients(ingredientCatalog);
+        } else if (lastIngredientSync) {
+          try {
+            const remoteIngredients = await listIngredients();
+            if (window.recipeCatalog) {
+              mergeCatalogIngredients(window.recipeCatalog, remoteIngredients);
+            }
+          } catch {
+            // ignore refresh failure
+          }
+        }
+        return recipe;
       } catch (error) {
         if (error.code === 'ALREADY_EXISTS' || error.code === 'INVALID_ID') {
           throw error;
@@ -306,6 +367,10 @@
     drafts[normalizedId] = normalized;
     writeDrafts(type, drafts);
     sourceMap[normalizedId] = normalized;
+
+    if (ingredientCatalog.length) {
+      lastIngredientSync = upsertLocalIngredients(ingredientCatalog);
+    }
 
     return normalized;
   }
@@ -389,6 +454,85 @@
     return Object.values(merged)
       .filter((item) => item?.id && !isRecipeDeleted(item.id))
       .map((item) => pickRecipeSummary(item));
+  }
+
+  async function listIngredients() {
+    if (hasRemote) {
+      try {
+        const data = unwrapResponse(await request('/api/ingredients'));
+        if (Array.isArray(data)) {
+          return data;
+        }
+      } catch {
+        // fall back to local data
+      }
+    }
+
+    const drafts = readDrafts('ingredient');
+    const merged = { ...getSourceMap('ingredient'), ...drafts };
+    return Object.values(merged)
+      .filter((item) => item?.id)
+      .map((item) => pickIngredientListItem(item));
+  }
+
+  async function syncIngredientCatalog(items) {
+    if (!Array.isArray(items) || !items.length) {
+      return { created: [], updated: [], skipped: [] };
+    }
+
+    if (hasRemote) {
+      try {
+        const data = unwrapResponse(await request('/api/ingredients/sync', {
+          method: 'POST',
+          body: JSON.stringify({ items }),
+        }));
+        lastIngredientSync = data || null;
+        upsertLocalIngredients(items);
+        return data || { created: [], updated: [], skipped: [] };
+      } catch (error) {
+        if (error.status === 403) {
+          throw error;
+        }
+        // fall through to local upsert
+      }
+    }
+
+    lastIngredientSync = upsertLocalIngredients(items);
+    return lastIngredientSync;
+  }
+
+  function mergeCatalogIngredients(catalog, remoteList) {
+    if (!catalog) return catalog;
+
+    const byId = new Map();
+    for (const item of catalog.ingredients || []) {
+      if (item?.id) {
+        byId.set(item.id, { ...item });
+      }
+    }
+
+    const details = getSourceMap('ingredient');
+    for (const item of Object.values(details)) {
+      if (!item?.id) continue;
+      const listItem = pickIngredientListItem(item);
+      byId.set(item.id, { ...(byId.get(item.id) || {}), ...listItem });
+    }
+
+    if (Array.isArray(remoteList)) {
+      for (const item of remoteList) {
+        if (!item?.id) continue;
+        byId.set(item.id, { ...(byId.get(item.id) || {}), ...item });
+        details[item.id] = model.normalize('ingredient', {
+          ...(details[item.id] || {}),
+          ...item,
+        });
+      }
+    }
+
+    catalog.ingredients = Array.from(byId.values()).sort((a, b) => (
+      String(a.name || '').localeCompare(String(b.name || ''), 'zh-CN')
+    ));
+    return catalog;
   }
 
   function mergeCatalogRecipes(catalog, remoteList) {
@@ -491,7 +635,11 @@
     startRecipeGeneration,
     pollRecipeGeneration,
     listRecipes,
+    listIngredients,
+    syncIngredientCatalog,
     mergeCatalogRecipes,
+    mergeCatalogIngredients,
+    getLastIngredientSync,
     getLastSaveTarget,
     getLastSaveFailure,
     isRemoteConfigured,

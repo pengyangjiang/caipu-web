@@ -179,8 +179,11 @@ async function handleCreate(req, res, type) {
   }
 
   try {
-    const created = store.createRecipe(payload.id, payload);
-    ok(res, created, 201);
+    const result = store.createRecipeWithSync(payload.id, payload);
+    ok(res, {
+      recipe: result.recipe,
+      ingredientSync: result.ingredientSync,
+    }, 201);
   } catch (error) {
     if (error.code === 'ALREADY_EXISTS') {
       conflict(res, error.message);
@@ -191,6 +194,34 @@ async function handleCreate(req, res, type) {
       return;
     }
     badRequest(res, error.message || 'Unable to create record');
+  }
+}
+
+async function handleIngredientSync(req, res) {
+  if (!isAdmin(req)) {
+    forbidden(res, 'Admin permission required');
+    return;
+  }
+
+  let payload;
+  try {
+    payload = await readBody(req);
+  } catch {
+    badRequest(res, 'Invalid JSON body');
+    return;
+  }
+
+  const items = Array.isArray(payload?.items) ? payload.items : [];
+  if (!items.length) {
+    badRequest(res, '请提供 items 数组');
+    return;
+  }
+
+  try {
+    const result = store.syncIngredientCatalog(items);
+    ok(res, result);
+  } catch (error) {
+    badRequest(res, error.message || 'Unable to sync ingredients');
   }
 }
 
@@ -457,6 +488,11 @@ async function handleRequest(req, res) {
 
   if (pathname === '/api/recipes' && (req.method === 'GET' || req.method === 'POST')) {
     await handleCollection(req, res, 'recipe');
+    return;
+  }
+
+  if (pathname === '/api/ingredients/sync' && req.method === 'POST') {
+    await handleIngredientSync(req, res);
     return;
   }
 

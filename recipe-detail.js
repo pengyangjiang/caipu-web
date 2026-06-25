@@ -683,6 +683,7 @@ function renderHeaderActions(recipe) {
     <a class="action-link" href="./recipe.html?id=${encodeURIComponent(prevId)}">← 上一个</a>
     <a class="action-link" href="./recipe.html?id=${encodeURIComponent(nextId)}">下一个 →</a>
     <a class="action-link" href="./recipes.html">全部菜品</a>
+    <a class="action-link" href="./ingredients.html">全部食材</a>
     <a class="action-link" href="./shopping.html">购物清单</a>
     ${editLink ? `<a class="action-link" href="${editLink}">编辑</a>` : ""}
     ${contentApi.canEdit() ? `<button class="action-link is-danger" type="button" id="deleteRecipeBtn">删除菜谱</button>` : ""}

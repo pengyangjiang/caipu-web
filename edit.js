@@ -489,11 +489,16 @@ async function saveCurrentForm() {
     state.data = saved;
     const savedTo = api.getLastSaveTarget?.() || (api.isRemoteConfigured() ? 'remote' : 'local');
     const saveFailure = api.getLastSaveFailure?.() || '';
+    const ingredientSync = api.getLastIngredientSync?.();
+    const syncCount = ingredientSync
+      ? (ingredientSync.created?.length || 0) + (ingredientSync.updated?.length || 0)
+      : 0;
+    const syncNote = syncCount > 0 ? `，已同步 ${syncCount} 个食材` : '';
     const successText = savedTo === 'remote'
-      ? (wasNew ? '已创建并保存到后端' : '已保存到后端')
+      ? (wasNew ? `已创建并保存到后端${syncNote}` : '已保存到后端')
       : saveFailure
-        ? `${wasNew ? '已创建到本机草稿' : '已保存到本机草稿'}：${saveFailure}`
-        : (wasNew ? '已创建到本机草稿（未写入服务器，换设备会丢失）' : '已保存到本机草稿（未写入服务器，换设备会丢失）');
+        ? `${wasNew ? '已创建到本机草稿' : '已保存到本机草稿'}：${saveFailure}${syncNote}`
+        : (wasNew ? `已创建到本机草稿（未写入服务器，换设备会丢失）${syncNote}` : `已保存到本机草稿（未写入服务器，换设备会丢失）${syncNote}`);
     editStatus.textContent = successText;
     setNotice(`${successText}，正在返回详情页...`);
     setDirty(false);

@@ -1,5 +1,6 @@
 import { startRecipeGeneration, pollRecipeGeneration } from '../../shared/cursor-recipe.mjs';
 import { ensureNutritionProfile } from '../../shared/nutrition-profile.js';
+import { upsertIngredientCatalog, stripIngredientCatalog } from '../../shared/ingredient-sync.js';
 import {
   getClientIpFromRequest,
   checkLoginRateLimit,
@@ -233,6 +234,42 @@ function mergeIngredient(current, patch) {
   });
 }
 
+function syncStoreIngredients(store, catalogItems) {
+  return upsertIngredientCatalog(store.ingredients, catalogItems, normalizeIngredient);
+}
+
+async function handleIngredientSync(request, env) {
+  if (!isAdmin(request, env)) {
+    return fail('FORBIDDEN', 'Admin permission required', 403);
+  }
+
+  let payload;
+  try {
+    payload = await request.json();
+  } catch {
+    return fail('BAD_REQUEST', 'Invalid JSON body', 400);
+  }
+
+  const items = Array.isArray(payload?.items) ? payload.items : [];
+  if (!items.length) {
+    return fail('BAD_REQUEST', '请提供 items 数组', 400);
+  }
+
+  const store = await loadStore(request, env);
+  const result = syncStoreIngredients(store, items);
+
+  try {
+    await persistStore(env, store.recipes, store.ingredients);
+  } catch (error) {
+    if (error.code === 'KV_NOT_CONFIGURED') {
+      return fail('KV_NOT_CONFIGURED', error.message, 503);
+    }
+    throw error;
+  }
+
+  return ok(result);
+}
+
 async function handleCreateRecipe(request, env) {
   if (!isAdmin(request, env)) {
     return fail('FORBIDDEN', 'Admin permission required', 403);
@@ -259,8 +296,10 @@ async function handleCreateRecipe(request, env) {
     return fail('ALREADY_EXISTS', 'Recipe id already exists', 409);
   }
 
+  const { recipePayload, ingredientCatalog } = stripIngredientCatalog(payload);
+
   const next = normalizeRecipe({
-    ...clone(payload),
+    ...clone(recipePayload),
     id,
     version: 1,
     updatedAt: new Date().toISOString(),
@@ -271,6 +310,7 @@ async function handleCreateRecipe(request, env) {
     : next.ingredients.flatMap((group) => (group.items || []).map((item) => item.name));
   next.ingredientCount = Number(next.ingredientCount || next.ingredientNames.length);
   store.recipes[id] = next;
+  const ingredientSync = syncStoreIngredients(store, ingredientCatalog);
 
   try {
     await persistStore(env, store.recipes, store.ingredients);
@@ -281,7 +321,7 @@ async function handleCreateRecipe(request, env) {
     throw error;
   }
 
-  return ok(next, 201);
+  return ok({ recipe: next, ingredientSync }, 201);
 }
 
 async function handleDetail(request, env, type, id) {
@@ -322,10 +362,16 @@ async function handleDetail(request, env, type, id) {
 
     try {
       updateVersion(current, payload);
+      const { recipePayload, ingredientCatalog } = type === 'recipe'
+        ? stripIngredientCatalog(payload)
+        : { recipePayload: payload, ingredientCatalog: [] };
       const next = type === 'recipe'
-        ? mergeRecipe(current, payload, store.ingredients)
+        ? mergeRecipe(current, recipePayload, store.ingredients)
         : mergeIngredient(current, payload);
       map[id] = next;
+      if (type === 'recipe' && ingredientCatalog.length) {
+        syncStoreIngredients(store, ingredientCatalog);
+      }
       await persistStore(env, store.recipes, store.ingredients);
       return ok(next);
     } catch (error) {
@@ -561,6 +607,10 @@ export async function onRequest(context) {
       const store = await loadStore(request, env);
       const recipes = Object.values(store.recipes).map((item) => pickRecipeSummary(normalizeRecipe(item, store.ingredients)));
       return ok(recipes);
+    }
+
+    if (route === 'ingredients/sync' && request.method === 'POST') {
+      return handleIngredientSync(request, env);
     }
 
     if (route === 'ingredients' && request.method === 'GET') {

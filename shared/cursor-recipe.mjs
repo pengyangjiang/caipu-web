@@ -17,12 +17,24 @@ function buildRecipePrompt(name, id) {
   "summary": [{ "label": "热量", "value": "286 kcal" }, { "label": "蛋白质", "value": "31g" }, { "label": "脂肪", "value": "11g" }, { "label": "碳水", "value": "18g" }],
   "meta": [{ "label": "烹饪时长", "value": "30 分钟" }, { "label": "份量", "value": "1 人份" }, { "label": "难度", "value": "简单" }],
   "ingredients": [{ "group": "主料", "items": [{ "name": "食材", "amount": "用量" }] }],
+  "ingredientCatalog": [
+    {
+      "id": "chicken-breast",
+      "name": "鸡胸肉",
+      "aliases": ["鸡胸"],
+      "category": "蛋白质",
+      "unit": "100g",
+      "caloriesPer100g": 133,
+      "nutritionPer100g": { "protein": 22.3, "fat": 5, "carbs": 0, "fiber": 0 }
+    }
+  ],
   "steps": [{ "title": "步骤标题", "content": "步骤内容", "time": "5 分钟" }],
   "nutrition": [{ "label": "蛋白质", "value": "31", "unit": "g / 份" }],
   "tips": [{ "title": "小贴士标题", "content": "内容" }]
 }
 
-注意：数值合理、步骤 3-6 步、食材分组清晰、使用简体中文。`;
+注意：数值合理、步骤 3-6 步、食材分组清晰、使用简体中文。
+ingredientCatalog 需覆盖菜谱中出现的每一种食材（含调料），id 使用小写英文连字符，category 从「蛋白质、蔬菜、主食、调味料、乳制品、油脂、香辛料、其他」中选择，并给出合理的每100g营养值。`;
 }
 
 function extractJsonObject(text) {
@@ -69,6 +81,9 @@ function normalizeGeneratedRecipe(recipe, id, name) {
     (group) => (group.items || []).map((item) => item.name),
   );
   normalized.ingredientCount = normalized.ingredientNames.length;
+  normalized.ingredientCatalog = Array.isArray(normalized.ingredientCatalog)
+    ? normalized.ingredientCatalog
+    : [];
   normalized.version = 1;
   normalized.updatedAt = null;
   return normalized;

@@ -3,52 +3,52 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>全部菜品</title>
+    <title>全部食材</title>
     <link rel="stylesheet" href="./style.css" />
   </head>
   <body>
-    <main class="page recipes-page">
+    <main class="page ingredients-page">
       <header class="page-header">
         <div class="page-header-left">
           <a class="back-link" href="./index.html">← 返回搜索页</a>
-          <p class="page-breadcrumb">全部菜品</p>
-          <h1 class="page-title recipes-page-title">浏览所有可选菜谱</h1>
+          <p class="page-breadcrumb">全部食材</p>
+          <h1 class="page-title ingredients-page-title">浏览所有食材</h1>
           <p class="page-desc">
-            按分类筛选或搜索菜名、标签，点击卡片进入详情页查看做法与营养信息。
+            按分类筛选或搜索名称、别名，点击条目查看营养信息与相关菜谱。
           </p>
         </div>
         <div class="page-header-actions">
           <a class="action-link" href="./index.html">智能搜索</a>
-          <a class="action-link" href="./ingredients.html">全部食材</a>
+          <a class="action-link" href="./recipes.html">全部菜品</a>
           <a class="action-link" href="./shopping.html">购物清单</a>
         </div>
       </header>
 
-      <section class="panel recipes-shell">
-        <div class="recipes-toolbar">
-          <label class="search-bar recipes-search" for="recipesSearch">
+      <section class="panel ingredients-shell">
+        <div class="ingredients-toolbar">
+          <label class="search-bar ingredients-search" for="ingredientsSearch">
             <span class="search-icon">⌕</span>
             <input
-              id="recipesSearch"
+              id="ingredientsSearch"
               type="search"
-              placeholder="搜索菜名、标签、食材..."
+              placeholder="搜索食材名称、别名..."
               autocomplete="off"
             />
           </label>
-          <div class="category-row" id="recipesCategoryChips"></div>
-          <p class="recipes-meta" id="recipesMeta">正在加载菜品...</p>
+          <div class="category-row" id="ingredientsCategoryChips"></div>
+          <p class="ingredients-meta" id="ingredientsMeta">正在加载食材...</p>
         </div>
 
-        <div class="recipe-grid" id="recipesGrid"></div>
+        <div class="ingredients-sections" id="ingredientsSections"></div>
       </section>
     </main>
 
     <script src="./data.js"></script>
     <script src="./ingredient-details.js"></script>
-    <script src="./shared/nutrition-profile.js"></script>
+    <script src="./shared/ingredient-sync.js"></script>
     <script src="./content-model.js"></script>
     <script src="./config.js"></script>
     <script src="./api-client.js"></script>
-    <script src="./recipes.js"></script>
+    <script src="./ingredients.js"></script>
   </body>
 </html>

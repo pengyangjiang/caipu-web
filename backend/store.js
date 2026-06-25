@@ -2,6 +2,7 @@ const fs = require('node:fs');
 const path = require('node:path');
 const { loadBrowserExport } = require('../scripts/load-browser-export');
 const { ensureNutritionProfile } = require('../shared/nutrition-profile');
+const { upsertIngredientCatalog, stripIngredientCatalog } = require('../shared/ingredient-sync');
 
 const ROOT = path.join(__dirname, '..');
 const STORAGE_DIR = path.join(__dirname, 'storage');
@@ -221,9 +222,10 @@ function createStore() {
   }
 
   function createRecipeRecord(id, patch) {
+    const { recipePayload, ingredientCatalog } = stripIngredientCatalog(patch);
     const normalizedId = assertNewId(id, recipes, 'Recipe');
     const next = normalizeRecipe({
-      ...clone(patch),
+      ...clone(recipePayload),
       id: normalizedId,
       version: 1,
       updatedAt: new Date().toISOString(),
@@ -234,8 +236,22 @@ function createStore() {
       : next.ingredients.flatMap((group) => (group.items || []).map((item) => item.name));
     next.ingredientCount = Number(next.ingredientCount || next.ingredientNames.length);
     recipes[normalizedId] = next;
+
+    let ingredientSync = { created: [], updated: [], skipped: [] };
+    if (ingredientCatalog.length) {
+      ingredientSync = upsertIngredientCatalog(ingredients, ingredientCatalog, normalizeIngredient);
+      persist();
+    } else {
+      persist();
+    }
+
+    return { recipe: next, ingredientSync };
+  }
+
+  function syncIngredientCatalog(catalogItems) {
+    const result = upsertIngredientCatalog(ingredients, catalogItems, normalizeIngredient);
     persist();
-    return next;
+    return result;
   }
 
   return {
@@ -264,10 +280,16 @@ function createStore() {
     updateRecipe(id, patch) {
       const current = recipes[id];
       assertRecord(current, 'Recipe');
-      updateVersion(current, patch);
-      const next = mergeRecipe(current, patch);
+      const { recipePayload, ingredientCatalog } = stripIngredientCatalog(patch);
+      updateVersion(current, recipePayload);
+      const next = mergeRecipe(current, recipePayload);
       recipes[id] = next;
-      persist();
+      let ingredientSync = { created: [], updated: [], skipped: [] };
+      if (ingredientCatalog.length) {
+        ingredientSync = syncIngredientCatalog(ingredientCatalog);
+      } else {
+        persist();
+      }
       return next;
     },
     updateIngredient(id, patch) {
@@ -280,7 +302,14 @@ function createStore() {
       return next;
     },
     createRecipe(id, patch) {
+      const result = createRecipeRecord(id, patch);
+      return result.recipe;
+    },
+    createRecipeWithSync(id, patch) {
       return createRecipeRecord(id, patch);
+    },
+    syncIngredientCatalog(catalogItems) {
+      return syncIngredientCatalog(catalogItems);
     },
     deleteRecipe(id) {
       const normalizedId = String(id || '').trim();

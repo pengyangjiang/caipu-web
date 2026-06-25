@@ -174,6 +174,7 @@ function renderHeaderActions(ingredient) {
   ingredientActions.innerHTML = `
     <a class="action-link" href="./ingredient.html?id=${encodeURIComponent(ingredient.id)}">刷新</a>
     <a class="action-link" href="./recipes.html">全部菜品</a>
+    <a class="action-link" href="./ingredients.html">全部食材</a>
     <a class="action-link" href="./shopping.html">购物清单</a>
     ${editLink ? `<a class="action-link" href="${editLink}">编辑</a>` : ""}
     ${logoutButton}
