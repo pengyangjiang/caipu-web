@@ -198,7 +198,7 @@
     };
   }
 
-  function upsertLocalIngredients(catalogItems) {
+  function upsertLocalIngredients(catalogItems, options = {}) {
     if (!Array.isArray(catalogItems) || !catalogItems.length) {
       return { created: [], updated: [], skipped: [] };
     }
@@ -214,11 +214,64 @@
       (item) => model.normalize('ingredient', item),
     );
 
+    if (Array.isArray(options.recipeIngredientNames) && window.ingredientSync.linkRecipeNamesToCatalog) {
+      window.ingredientSync.linkRecipeNamesToCatalog(map, options.recipeIngredientNames);
+    }
+
+    const drafts = readDrafts('ingredient');
+    for (const item of Object.values(map)) {
+      if (item?.id) {
+        drafts[item.id] = item;
+      }
+    }
+    writeDrafts('ingredient', drafts);
+
     if (window.recipeCatalog) {
       mergeCatalogIngredients(window.recipeCatalog, Object.values(map));
     }
 
     return result;
+  }
+
+  function applyRecipeIngredientLinks(recipeIngredientNames) {
+    if (!Array.isArray(recipeIngredientNames) || !recipeIngredientNames.length) return;
+    if (!window.ingredientSync?.linkRecipeNamesToCatalog) return;
+
+    const map = getSourceMap('ingredient');
+    window.ingredientSync.linkRecipeNamesToCatalog(map, recipeIngredientNames);
+
+    const drafts = readDrafts('ingredient');
+    for (const item of Object.values(map)) {
+      if (item?.id) {
+        drafts[item.id] = item;
+      }
+    }
+    writeDrafts('ingredient', drafts);
+
+    if (window.recipeCatalog) {
+      mergeCatalogIngredients(window.recipeCatalog, Object.values(map));
+    }
+  }
+
+  async function syncCatalogIngredients(catalog) {
+    if (!catalog) return catalog;
+
+    mergeCatalogIngredients(catalog, []);
+
+    if (hasRemote) {
+      try {
+        const remoteList = await listIngredients();
+        if (Array.isArray(remoteList)) {
+          mergeCatalogIngredients(catalog, remoteList);
+        }
+      } catch {
+        // fall back to bundled / draft data
+      }
+    } else {
+      mergeCatalogIngredients(catalog, Object.values({ ...getSourceMap('ingredient'), ...readDrafts('ingredient') }));
+    }
+
+    return catalog;
   }
 
   async function loadContent(type, id) {
@@ -329,16 +382,20 @@
         const recipe = model.normalize(type, response?.recipe || response);
         lastIngredientSync = response?.ingredientSync || null;
         if (ingredientCatalog.length) {
-          upsertLocalIngredients(ingredientCatalog);
+          upsertLocalIngredients(ingredientCatalog, {
+            recipeIngredientNames: normalized.ingredientNames,
+          });
         } else if (lastIngredientSync) {
           try {
-            const remoteIngredients = await listIngredients();
             if (window.recipeCatalog) {
-              mergeCatalogIngredients(window.recipeCatalog, remoteIngredients);
+              await syncCatalogIngredients(window.recipeCatalog);
             }
+            applyRecipeIngredientLinks(normalized.ingredientNames);
           } catch {
             // ignore refresh failure
           }
+        } else {
+          applyRecipeIngredientLinks(normalized.ingredientNames);
         }
         return recipe;
       } catch (error) {
@@ -369,7 +426,11 @@
     sourceMap[normalizedId] = normalized;
 
     if (ingredientCatalog.length) {
-      lastIngredientSync = upsertLocalIngredients(ingredientCatalog);
+      lastIngredientSync = upsertLocalIngredients(ingredientCatalog, {
+        recipeIngredientNames: normalized.ingredientNames,
+      });
+    } else {
+      applyRecipeIngredientLinks(normalized.ingredientNames);
     }
 
     return normalized;
@@ -639,6 +700,8 @@
     syncIngredientCatalog,
     mergeCatalogRecipes,
     mergeCatalogIngredients,
+    syncCatalogIngredients,
+    applyRecipeIngredientLinks,
     getLastIngredientSync,
     getLastSaveTarget,
     getLastSaveFailure,

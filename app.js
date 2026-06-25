@@ -79,6 +79,13 @@ function getCategoryLabel(id) {
 }
 
 function getIngredientByName(name) {
+  if (window.ingredientSync?.resolveIngredientByName) {
+    return window.ingredientSync.resolveIngredientByName(name, {
+      catalogIngredients: catalog.ingredients,
+      ingredientDetails: window.ingredientDetails,
+    });
+  }
+
   const normalized = normalizeText(name);
   return (
     catalog.ingredients.find((ingredient) => {
@@ -630,6 +637,9 @@ if (closePreviewBtn) {
 
 (async function init() {
   await syncRecipeCatalog();
+  if (api?.syncCatalogIngredients) {
+    await api.syncCatalogIngredients(catalog);
+  }
   renderAll();
 })();
 

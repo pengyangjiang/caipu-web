@@ -63,6 +63,50 @@ function findIngredientByName(ingredientsMap, name) {
   return null;
 }
 
+function resolveIngredientByName(name, options = {}) {
+  const catalogIngredients = options.catalogIngredients || [];
+  const ingredientDetails = options.ingredientDetails || {};
+  const target = normalizeIngredientName(name);
+  if (!target) return null;
+
+  for (const item of catalogIngredients) {
+    if (!item) continue;
+    if (normalizeIngredientName(item.name) === target) return item;
+    if ((item.aliases || []).some((alias) => normalizeIngredientName(alias) === target)) {
+      return item;
+    }
+  }
+
+  return findIngredientByName(ingredientDetails, name);
+}
+
+function linkRecipeNamesToCatalog(ingredientsMap, recipeIngredientNames) {
+  if (!ingredientsMap || !Array.isArray(recipeIngredientNames)) return;
+
+  for (const rawName of recipeIngredientNames) {
+    const name = String(rawName || '').trim();
+    if (!name) continue;
+
+    const existing = findIngredientByName(ingredientsMap, name);
+    if (existing) {
+      if (!(existing.aliases || []).some((alias) => normalizeIngredientName(alias) === normalizeIngredientName(name))) {
+        existing.aliases = [...new Set([...(existing.aliases || []), name, existing.name].filter(Boolean))];
+      }
+      continue;
+    }
+
+    const normalized = normalizeIngredientName(name);
+    for (const item of Object.values(ingredientsMap)) {
+      if (!item?.name) continue;
+      const itemName = normalizeIngredientName(item.name);
+      if (itemName.includes(normalized) || normalized.includes(itemName)) {
+        item.aliases = [...new Set([...(item.aliases || []), name, item.name].filter(Boolean))];
+        break;
+      }
+    }
+  }
+}
+
 function mergeCatalogEntry(existing, incoming) {
   const aliases = [...new Set([
     ...(existing.aliases || []),
@@ -166,6 +210,8 @@ if (typeof module !== 'undefined') {
     normalizeIngredientName,
     normalizeCatalogEntry,
     findIngredientByName,
+    resolveIngredientByName,
+    linkRecipeNamesToCatalog,
     upsertIngredientCatalog,
     stripIngredientCatalog,
   };
@@ -177,6 +223,8 @@ if (typeof window !== 'undefined') {
     normalizeIngredientName,
     normalizeCatalogEntry,
     findIngredientByName,
+    resolveIngredientByName,
+    linkRecipeNamesToCatalog,
     upsertIngredientCatalog,
     stripIngredientCatalog,
   };

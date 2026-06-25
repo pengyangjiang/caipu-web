@@ -43,6 +43,13 @@ function normalizeText(value) {
 }
 
 function getIngredientByName(name) {
+  if (window.ingredientSync?.resolveIngredientByName) {
+    return window.ingredientSync.resolveIngredientByName(name, {
+      catalogIngredients: catalog.ingredients,
+      ingredientDetails: window.ingredientDetails,
+    });
+  }
+
   const normalized = normalizeText(name);
   return (
     catalog.ingredients.find((ingredient) => {
@@ -821,6 +828,13 @@ function syncCoverImageState(recipe) {
     }
   }
 
+  if (contentApi?.syncCatalogIngredients) {
+    await contentApi.syncCatalogIngredients(catalog);
+  }
+
   const recipe = await contentApi.loadContent("recipe", getRecipeIdFromQuery());
+  if (recipe?.ingredientNames?.length && contentApi.applyRecipeIngredientLinks) {
+    contentApi.applyRecipeIngredientLinks(recipe.ingredientNames);
+  }
   renderRecipeDetail(recipe);
 })();

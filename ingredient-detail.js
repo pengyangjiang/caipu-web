@@ -317,6 +317,10 @@ function renderIngredientPage(ingredient) {
 }
 
 (async function init() {
+  if (contentApi?.syncCatalogIngredients && catalog) {
+    await contentApi.syncCatalogIngredients(catalog);
+  }
+
   const ingredient = await contentApi.loadContent("ingredient", getIngredientIdFromQuery());
   renderIngredientPage(ingredient);
 })();
