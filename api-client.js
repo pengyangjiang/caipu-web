@@ -371,21 +371,19 @@
   async function syncCatalogIngredients(catalog) {
     if (!catalog) return catalog;
 
-    mergeCatalogIngredients(catalog, []);
-
     if (hasRemote) {
       try {
         const remoteList = await listIngredients();
         if (Array.isArray(remoteList)) {
-          mergeCatalogIngredients(catalog, remoteList);
+          return mergeCatalogIngredients(catalog, remoteList, { remoteAuthoritative: true });
         }
       } catch {
         // fall back to bundled / draft data
       }
-    } else {
-      mergeCatalogIngredients(catalog, Object.values({ ...getSourceMap('ingredient'), ...readDrafts('ingredient') }));
     }
 
+    mergeCatalogIngredients(catalog, []);
+    mergeCatalogIngredients(catalog, Object.values({ ...getSourceMap('ingredient'), ...readDrafts('ingredient') }));
     return catalog;
   }
 
@@ -774,8 +772,20 @@
     const names = window.ingredientSync.collectRecipeIngredientNames(recipe);
     if (!names.length) return null;
 
+    let authoritativeCatalog = window.recipeCatalog?.ingredients || [];
+    if (hasRemote) {
+      try {
+        const remoteList = await listIngredients();
+        if (Array.isArray(remoteList)) {
+          authoritativeCatalog = remoteList;
+        }
+      } catch {
+        // keep local catalog fallback
+      }
+    }
+
     const missing = names.filter((name) => !window.ingredientSync.resolveIngredientByName(name, {
-      catalogIngredients: window.recipeCatalog?.ingredients || [],
+      catalogIngredients: authoritativeCatalog,
       catalogOnly: true,
     }));
     if (!missing.length) return null;
@@ -822,10 +832,21 @@
     return lastIngredientSync;
   }
 
-  function mergeCatalogIngredients(catalog, remoteList) {
+  function mergeCatalogIngredients(catalog, remoteList, options = {}) {
     if (!catalog) return catalog;
 
     const deleted = readDeletedIngredientIds();
+
+    if (options.remoteAuthoritative && Array.isArray(remoteList)) {
+      catalog.ingredients = remoteList
+        .filter((item) => item?.id && !deleted.has(item.id))
+        .map((item) => mergeIngredientSnapshot(null, item))
+        .sort((a, b) => String(a.name || '').localeCompare(String(b.name || ''), 'zh-CN'));
+      return catalog;
+    }
+
+    if (!Array.isArray(remoteList)) return catalog;
+
     const byId = new Map();
     for (const item of catalog.ingredients || []) {
       if (item?.id && !deleted.has(item.id)) {
@@ -840,12 +861,10 @@
       byId.set(item.id, mergeIngredientSnapshot(byId.get(item.id), listItem));
     }
 
-    if (Array.isArray(remoteList)) {
-      for (const item of remoteList) {
-        if (!item?.id || deleted.has(item.id)) continue;
-        byId.set(item.id, mergeIngredientSnapshot(byId.get(item.id), item));
-        details[item.id] = mergeIngredientSnapshot(details[item.id], item);
-      }
+    for (const item of remoteList) {
+      if (!item?.id || deleted.has(item.id)) continue;
+      byId.set(item.id, mergeIngredientSnapshot(byId.get(item.id), item));
+      details[item.id] = mergeIngredientSnapshot(details[item.id], item);
     }
 
     catalog.ingredients = Array.from(byId.values()).sort((a, b) => (
