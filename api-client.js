@@ -67,6 +67,15 @@
     localStorage.setItem(deletedIngredientsKey, JSON.stringify([...deleted]));
   }
 
+  function unmarkIngredientDeleted(id) {
+    const normalizedId = String(id || '').trim();
+    if (!normalizedId) return;
+    const deleted = readDeletedIngredientIds();
+    if (!deleted.has(normalizedId)) return;
+    deleted.delete(normalizedId);
+    localStorage.setItem(deletedIngredientsKey, JSON.stringify([...deleted]));
+  }
+
   function isIngredientDeleted(id) {
     return readDeletedIngredientIds().has(String(id || '').trim());
   }
@@ -108,6 +117,15 @@
     if (!normalizedId) return;
     const deleted = readDeletedRecipeIds();
     deleted.add(normalizedId);
+    localStorage.setItem(deletedRecipesKey, JSON.stringify([...deleted]));
+  }
+
+  function unmarkRecipeDeleted(id) {
+    const normalizedId = String(id || '').trim();
+    if (!normalizedId) return;
+    const deleted = readDeletedRecipeIds();
+    if (!deleted.has(normalizedId)) return;
+    deleted.delete(normalizedId);
     localStorage.setItem(deletedRecipesKey, JSON.stringify([...deleted]));
   }
 
@@ -341,7 +359,11 @@
     }
     writeDrafts('ingredient', drafts);
 
-    if (window.recipeCatalog) {
+    for (const item of catalogItems) {
+      if (item?.id) unmarkIngredientDeleted(item.id);
+    }
+
+    if (window.recipeCatalog && !hasRemote) {
       mergeCatalogIngredients(window.recipeCatalog, Object.values(map));
     }
 
@@ -408,6 +430,8 @@
         const data = unwrapResponse(await request(path));
         if (data) {
           remoteRecord = model.normalize(type, data);
+          if (type === 'ingredient') unmarkIngredientDeleted(id);
+          if (type === 'recipe') unmarkRecipeDeleted(id);
         }
       } catch (error) {
         if (error.status === 404 || error.code === 'NOT_FOUND') {
@@ -535,6 +559,9 @@
           upsertLocalIngredients(ingredientCatalog, {
             recipeIngredientNames: normalized.ingredientNames,
           });
+          if (window.recipeCatalog) {
+            await syncCatalogIngredients(window.recipeCatalog);
+          }
         } else if (lastIngredientSync) {
           try {
             if (window.recipeCatalog) {
@@ -730,6 +757,9 @@
       try {
         const data = unwrapResponse(await request('/api/recipes'));
         if (Array.isArray(data)) {
+          for (const item of data) {
+            if (item?.id) unmarkRecipeDeleted(item.id);
+          }
           return data.filter((item) => item?.id && !isRecipeDeleted(item.id));
         }
       } catch {
@@ -749,6 +779,9 @@
       try {
         const data = unwrapResponse(await request('/api/ingredients'));
         if (Array.isArray(data)) {
+          for (const item of data) {
+            if (item?.id) unmarkIngredientDeleted(item.id);
+          }
           return data.filter((item) => item?.id && !isIngredientDeleted(item.id));
         }
       } catch {

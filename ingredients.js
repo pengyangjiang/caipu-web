@@ -265,15 +265,11 @@ async function confirmBatchDelete() {
 }
 
 async function syncIngredientCatalog() {
-  if (!api?.listIngredients) return;
-  try {
-    const remoteList = await api.listIngredients();
-    if (Array.isArray(remoteList)) {
-      api.mergeCatalogIngredients(catalog, remoteList);
-    }
-  } catch {
-    // fall back to bundled catalog
+  if (api?.syncCatalogIngredients) {
+    await api.syncCatalogIngredients(catalog);
+    return;
   }
+  api.mergeCatalogIngredients?.(catalog, []);
 }
 
 function bindBatchModal() {
@@ -318,7 +314,6 @@ async function init() {
   }
   bindBatchModal();
 
-  api.mergeCatalogIngredients?.(catalog, []);
   await syncIngredientCatalog();
   renderCategoryChips();
   renderIngredients();

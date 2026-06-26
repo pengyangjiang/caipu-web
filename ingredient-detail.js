@@ -84,13 +84,26 @@ function getIngredientNutrientRows(ingredient, reference) {
 }
 
 function recipeUsesIngredient(recipe, ingredient) {
-  const names = [ingredient.name, ...(ingredient.aliases || [])].map(normalizeText);
+  if (!ingredient?.id) return false;
+
   const recipeIngredients = Array.isArray(recipe.ingredientNames) && recipe.ingredientNames.length
     ? recipe.ingredientNames
     : (recipe.ingredients || []).flatMap((group) => (group.items || []).map((item) => item.name));
+
   return recipeIngredients.some((name) => {
+    const matched = window.ingredientSync?.resolveIngredientByName(name, {
+      catalogIngredients: catalog.ingredients,
+      ingredientDetails: window.ingredientDetails,
+      catalogOnly: Boolean(contentApi?.isRemoteConfigured?.()),
+    });
+    if (matched?.id === ingredient.id) return true;
+
+    const keys = new Set([
+      normalizeText(ingredient.name),
+      ...(ingredient.aliases || []).map(normalizeText),
+    ]);
     const itemText = normalizeText(name);
-    return names.some((needle) => itemText.includes(needle) || needle.includes(itemText));
+    return keys.has(itemText);
   });
 }
 
