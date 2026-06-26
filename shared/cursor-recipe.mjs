@@ -1,13 +1,67 @@
 const CURSOR_API_BASE = 'https://api.cursor.com';
 
 const CATEGORY_IDS = ['breakfast', 'lunch', 'dinner', 'light', 'quick'];
+const RECIPE_ID_PATTERN = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
 
-function buildRecipePrompt(name, id) {
-  return `你是菜谱数据助手。请为中文菜谱「${name}」生成完整结构化数据，菜谱 ID 为「${id}」。
+export function isValidRecipeId(id) {
+  return RECIPE_ID_PATTERN.test(String(id || '').trim());
+}
+
+export function slugifyRecipeName(name) {
+  const ascii = String(name || '')
+    .normalize('NFKD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '')
+    .replace(/-{2,}/g, '-');
+
+  if (ascii && isValidRecipeId(ascii)) {
+    return ascii;
+  }
+
+  const seed = String(name || 'recipe').trim();
+  let hash = 0;
+  for (let i = 0; i < seed.length; i += 1) {
+    hash = ((hash << 5) - hash + seed.charCodeAt(i)) | 0;
+  }
+  return `recipe-${Math.abs(hash).toString(36)}`;
+}
+
+export function resolveUniqueRecipeId(candidateId, formalName, existingIds) {
+  const taken = existingIds instanceof Set ? existingIds : new Set(existingIds || []);
+  let base = isValidRecipeId(candidateId) ? String(candidateId).trim() : slugifyRecipeName(formalName);
+  if (!isValidRecipeId(base)) {
+    base = slugifyRecipeName(formalName);
+  }
+
+  if (!taken.has(base)) {
+    return base;
+  }
+
+  for (let index = 2; index < 1000; index += 1) {
+    const next = `${base}-${index}`;
+    if (!taken.has(next)) {
+      return next;
+    }
+  }
+
+  return `${base}-${Date.now().toString(36)}`;
+}
+
+function buildRecipePrompt(workingName, preferences) {
+  const preferenceBlock = preferences
+    ? `\n用户做法偏好：${preferences}\n请将这些偏好融入正式菜名、简介、食材用量与步骤中。`
+    : '';
+
+  return `你是菜谱数据助手。用户想做的菜：「${workingName}」。${preferenceBlock}
+
+请生成完整结构化数据，并自行确定合适的正式中文菜名与菜谱 ID。
 
 只输出一个 JSON 对象，不要 markdown 代码块，不要任何解释文字。字段要求：
 {
-  "name": "菜名",
+  "id": "小写英文连字符 slug，2-5 个英文词，语义清晰，如 tomato-egg-stir-fry-low-oil",
+  "name": "正式中文菜名",
   "coverImage": "https://images.unsplash.com/photo-... 格式的封面图 URL",
   "desc": "一句话到两句话简介",
   "categories": ["从 breakfast,lunch,dinner,light,quick 中选 1-3 个"],
@@ -37,6 +91,7 @@ function buildRecipePrompt(name, id) {
 }
 
 注意：数值合理、步骤 3-6 步、食材分组清晰、使用简体中文。
+id 只能包含小写英文字母、数字和连字符；name 必须是中文菜名。
 ingredientCatalog 需覆盖菜谱中出现的每一种食材（含调料），id 使用小写英文连字符，category 从「蛋白质、蔬菜、主食、调味料、乳制品、油脂、香辛料、其他」中选择，并给出合理的每100g营养值；每种食材还需填写 handlingTips（2-3 条处理要点）、storageTips（1-2 条保存建议）、cookingNotes（1-2 条烹饪建议），均为中文短句数组。`;
 }
 
@@ -58,10 +113,17 @@ function extractJsonObject(text) {
   return JSON.parse(candidate.slice(start, end + 1));
 }
 
-function normalizeGeneratedRecipe(recipe, id, name) {
+function normalizeGeneratedRecipe(recipe, workingName, options = {}) {
   const normalized = recipe && typeof recipe === 'object' ? recipe : {};
-  normalized.id = id;
-  normalized.name = String(normalized.name || name || '').trim() || name;
+  const formalName = String(normalized.name || workingName || '').trim() || workingName;
+  const resolvedId = resolveUniqueRecipeId(
+    normalized.id,
+    formalName,
+    options.existingIds || [],
+  );
+
+  normalized.id = resolvedId;
+  normalized.name = formalName;
   normalized.categories = Array.isArray(normalized.categories)
     ? normalized.categories.filter((item) => CATEGORY_IDS.includes(item))
     : ['lunch'];
@@ -92,9 +154,9 @@ function normalizeGeneratedRecipe(recipe, id, name) {
   return normalized;
 }
 
-function parseRecipeFromAgentText(text, id, name) {
+function parseRecipeFromAgentText(text, workingName, options = {}) {
   const parsed = extractJsonObject(text);
-  return normalizeGeneratedRecipe(parsed, id, name);
+  return normalizeGeneratedRecipe(parsed, workingName, options);
 }
 
 function getCursorAuthHeader(apiKey) {
@@ -131,9 +193,9 @@ async function cursorRequest(apiKey, path, options = {}) {
   return payload;
 }
 
-function buildAgentCreateBody(name, id, modelId) {
+function buildAgentCreateBody(workingName, preferences, modelId) {
   const body = {
-    prompt: { text: buildRecipePrompt(name, id) },
+    prompt: { text: buildRecipePrompt(workingName, preferences) },
   };
 
   const normalizedModelId = String(modelId || '').trim();
@@ -144,10 +206,16 @@ function buildAgentCreateBody(name, id, modelId) {
   return body;
 }
 
-export async function startRecipeGeneration(apiKey, name, id, options = {}) {
+export async function startRecipeGeneration(apiKey, workingName, options = {}) {
+  const name = String(workingName || '').trim();
+  if (!name) {
+    throw new Error('请提供菜名');
+  }
+
+  const preferences = String(options.preferences || '').trim();
   const payload = await cursorRequest(apiKey, '/v1/agents', {
     method: 'POST',
-    body: JSON.stringify(buildAgentCreateBody(name, id, options.modelId)),
+    body: JSON.stringify(buildAgentCreateBody(name, preferences, options.modelId)),
   });
 
   const agentId = payload?.agent?.id;
@@ -160,10 +228,12 @@ export async function startRecipeGeneration(apiKey, name, id, options = {}) {
     agentId,
     runId,
     status: payload?.run?.status || 'CREATING',
+    name,
+    preferences,
   };
 }
 
-export async function pollRecipeGeneration(apiKey, agentId, runId, name, id) {
+export async function pollRecipeGeneration(apiKey, agentId, runId, workingName, options = {}) {
   const run = await cursorRequest(apiKey, `/v1/agents/${encodeURIComponent(agentId)}/runs/${encodeURIComponent(runId)}`);
 
   const status = run?.status || 'UNKNOWN';
@@ -172,7 +242,9 @@ export async function pollRecipeGeneration(apiKey, agentId, runId, name, id) {
   }
 
   if (status === 'FINISHED') {
-    const recipe = parseRecipeFromAgentText(run?.result || '', id, name);
+    const recipe = parseRecipeFromAgentText(run?.result || '', workingName, {
+      existingIds: options.existingIds || [],
+    });
     return { status, recipe };
   }
 

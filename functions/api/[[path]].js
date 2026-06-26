@@ -441,19 +441,17 @@ async function handleGenerateRecipeStart(request, env) {
   }
 
   const name = String(payload?.name || '').trim();
-  const id = String(payload?.id || '').trim();
+  const preferences = String(payload?.preferences || '').trim();
   if (!name) {
     return fail('BAD_REQUEST', '请提供菜名', 400);
   }
-  if (!id || !/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(id)) {
-    return fail('BAD_REQUEST', '请提供合法菜谱 ID（小写字母、数字、连字符）', 400);
-  }
 
   try {
-    const started = await startRecipeGeneration(apiKey, name, id, {
+    const started = await startRecipeGeneration(apiKey, name, {
+      preferences,
       modelId: env.CURSOR_MODEL_ID,
     });
-    return ok({ ...started, name, id }, 202);
+    return ok({ ...started, name, preferences }, 202);
   } catch (error) {
     if (error.code === 'CURSOR_NOT_CONFIGURED') {
       return fail('CURSOR_NOT_CONFIGURED', error.message, 503);
@@ -476,14 +474,27 @@ async function handleGenerateRecipeStatus(request, env) {
   const agentId = String(url.searchParams.get('agentId') || '').trim();
   const runId = String(url.searchParams.get('runId') || '').trim();
   const name = String(url.searchParams.get('name') || '').trim();
-  const id = String(url.searchParams.get('id') || '').trim();
+  const preferences = String(url.searchParams.get('preferences') || '').trim();
+  const clientExistingIds = String(url.searchParams.get('existingIds') || '')
+    .split(',')
+    .map((item) => item.trim())
+    .filter(Boolean);
 
-  if (!agentId || !runId || !name || !id) {
-    return fail('BAD_REQUEST', '缺少 agentId、runId、name 或 id 参数', 400);
+  if (!agentId || !runId || !name) {
+    return fail('BAD_REQUEST', '缺少 agentId、runId 或 name 参数', 400);
   }
 
+  const store = await loadStore(request, env);
+  const existingIds = [...new Set([
+    ...Object.keys(store.recipes || {}),
+    ...clientExistingIds,
+  ])];
+
   try {
-    const result = await pollRecipeGeneration(apiKey, agentId, runId, name, id);
+    const result = await pollRecipeGeneration(apiKey, agentId, runId, name, {
+      preferences,
+      existingIds,
+    });
     return ok(result);
   } catch (error) {
     if (error.code === 'GENERATION_FAILED') {

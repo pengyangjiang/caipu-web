@@ -29,6 +29,8 @@ const state = {
   saving: false,
   generating: false,
   canEdit: false,
+  aiWorkingName: "",
+  aiPreferences: "",
 };
 
 function getParam(name) {
@@ -116,14 +118,26 @@ function renderActions() {
   }
 }
 
-function renderField(label, name, value, help = "", type = "text") {
+function renderField(label, name, value, help = "", type = "text", readonly = false) {
+  const readonlyAttr = readonly ? " readonly" : "";
   return `
     <label class="edit-field">
       <span>${label}</span>
       ${type === "textarea"
-        ? `<textarea name="${name}" rows="4" placeholder="请输入${label}">${escapeAttr(value)}</textarea>`
-        : `<input name="${name}" type="${type}" value="${escapeAttr(value)}" placeholder="请输入${label}" />`}
+        ? `<textarea name="${name}" rows="4" placeholder="请输入${label}"${readonlyAttr}>${escapeAttr(value)}</textarea>`
+        : `<input name="${name}" type="${type}" value="${escapeAttr(value)}" placeholder="请输入${label}"${readonlyAttr} />`}
       ${help ? `<small>${help}</small>` : ""}
+    </label>
+  `;
+}
+
+function renderReadonlyIdField(id) {
+  return `
+    <input type="hidden" name="id" value="${escapeAttr(id)}" />
+    <label class="edit-field">
+      <span>菜谱 ID</span>
+      <input type="text" value="${escapeAttr(id)}" readonly />
+      <small>由 AI 自动生成，用于链接与存储</small>
     </label>
   `;
 }
@@ -214,18 +228,33 @@ function parseTextRows(text) {
 }
 
 function renderRecipeEditor(recipe, isNew = false) {
+  const hasGenerated = Boolean(recipe.id);
   editBreadcrumb.textContent = isNew ? "新建菜谱" : `编辑菜谱 / ${recipe.name}`;
   editTitle.textContent = isNew ? "新建菜谱" : `编辑菜谱：${recipe.name}`;
   editDesc.textContent = isNew
-    ? "填写菜谱 ID 和菜名后，建议先点「AI 自动生成」或手动补全步骤与原材料，再点「创建菜谱」。在输入框按回车不会直接创建。"
+    ? "填写菜名和可选做法偏好后，点击「AI 生成菜谱」。生成完成后请检查内容，再点「创建菜谱」保存。按回车不会直接创建。"
     : "可以修改步骤、注意事项、营养数据、原材料等内容。多行字段支持按行编辑。";
   editModeHint.textContent = api.isRemoteConfigured() ? "会优先保存到后端接口" : "当前会先保存为本地草稿";
 
-  editForm.innerHTML = `
+  const aiInputSection = isNew && !hasGenerated
+    ? `
+      <div class="edit-grid">
+        ${renderField("菜名", "name", recipe.name, "例如：番茄炒蛋、少油版")}
+        ${renderTextareaField("做法偏好", "preferences", state.aiPreferences || "", "可选：少油、不要放糖、一人份、快手…")}
+      </div>
+      <div class="edit-ai-row">
+        <button type="button" class="favorite-button" id="aiGenerateButton">AI 生成菜谱</button>
+        <small>AI 会自动生成正式菜名、菜谱 ID 和完整内容</small>
+      </div>
+    `
+    : "";
+
+  const detailSections = hasGenerated || !isNew
+    ? `
     <section class="edit-section">
       <h2 class="section-title">基础信息</h2>
       <div class="edit-grid">
-        ${isNew ? renderField("菜谱 ID", "id", recipe.id || "", "小写英文、数字和连字符，例如：tomato-egg-soup") : ""}
+        ${isNew && hasGenerated ? renderReadonlyIdField(recipe.id) : ""}
         ${renderField("菜名", "name", recipe.name)}
         ${renderField("封面图", "coverImage", recipe.coverImage)}
         ${renderTextareaField("简介", "desc", recipe.desc, "支持多行描述")}
@@ -235,8 +264,8 @@ function renderRecipeEditor(recipe, isNew = false) {
       </div>
       ${isNew ? `
         <div class="edit-ai-row">
-          <button type="button" class="favorite-button" id="aiGenerateButton">AI 自动生成</button>
-          <small>填写 ID 和菜名后点击，AI 会填入表单内容，请检查后手动点「创建菜谱」保存</small>
+          <button type="button" class="favorite-button" id="aiGenerateButton">重新 AI 生成</button>
+          <small>会覆盖当前表单内容，请确认后再点</small>
         </div>
       ` : ""}
     </section>
@@ -277,7 +306,20 @@ function renderRecipeEditor(recipe, isNew = false) {
         ${isNew ? "" : renderField("更新时间", "updatedAt", recipe.updatedAt || "", "保存后自动更新", "text")}
       </div>
     </section>
-  `;
+    `
+    : `
+    <div class="empty-state">填写上方菜名后点击「AI 生成菜谱」，完整表单会出现在这里。</div>
+    `;
+
+  editForm.innerHTML = isNew && !hasGenerated
+    ? `
+    <section class="edit-section">
+      <h2 class="section-title">开始创建</h2>
+      ${aiInputSection}
+    </section>
+    ${detailSections}
+    `
+    : detailSections;
   bindAiGenerateButton();
 }
 
@@ -290,7 +332,7 @@ function bindAiGenerateButton() {
   });
 }
 
-function setAiGenerating(active, label = "AI 自动生成") {
+function setAiGenerating(active, label = "AI 生成菜谱") {
   const button = document.getElementById("aiGenerateButton");
   if (button) {
     button.disabled = active;
@@ -298,16 +340,18 @@ function setAiGenerating(active, label = "AI 自动生成") {
   }
 }
 
-async function pollAiGeneration(agentId, runId, name, id) {
+async function pollAiGeneration(agentId, runId, workingName, preferences) {
   const delay = (ms) => new Promise((resolve) => window.setTimeout(resolve, ms));
 
   while (state.generating) {
-    const result = await api.pollRecipeGeneration(agentId, runId, name, id);
+    const result = await api.pollRecipeGeneration(agentId, runId, workingName, preferences);
     if (result?.status === "FINISHED" && result.recipe) {
-      state.data = { ...result.recipe, id };
+      state.data = result.recipe;
+      state.aiWorkingName = workingName;
+      state.aiPreferences = preferences;
       renderRecipeEditor(state.data, true);
       setDirty(true);
-      setNotice("AI 已生成内容，请检查后点击「创建菜谱」保存");
+      setNotice(`AI 已生成「${result.recipe.name}」（ID: ${result.recipe.id}），请检查后点击「创建菜谱」保存`);
       editStatus.textContent = "AI 生成完成，待保存";
       return;
     }
@@ -343,16 +387,21 @@ async function startAiGeneration() {
   if (!state.isNew || state.generating || !api.startRecipeGeneration) return;
 
   const formData = new FormData(editForm);
-  const id = String(formData.get("id") || "").trim();
-  const name = String(formData.get("name") || "").trim();
+  const workingName = String(
+    formData.get("name") || state.aiWorkingName || state.data?.name || "",
+  ).trim();
+  const preferences = String(
+    formData.get("preferences") ?? state.aiPreferences ?? "",
+  ).trim();
 
-  if (!name) {
+  if (!workingName) {
     setNotice("请先填写菜名", "error");
     return;
   }
-  if (!id || !/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(id)) {
-    setNotice("请先填写合法菜谱 ID（小写字母、数字、连字符）", "error");
-    return;
+
+  if (state.data?.id) {
+    const confirmed = window.confirm("重新生成会覆盖当前表单内容，确定继续吗？");
+    if (!confirmed) return;
   }
 
   state.generating = true;
@@ -361,11 +410,16 @@ async function startAiGeneration() {
   editStatus.textContent = "AI 生成中";
 
   try {
-    const started = await api.startRecipeGeneration(name, id);
+    const started = await api.startRecipeGeneration(workingName, preferences);
     if (!started?.agentId || !started?.runId) {
       throw new Error("服务器未返回生成任务信息");
     }
-    await pollAiGeneration(started.agentId, started.runId, name, id);
+    await pollAiGeneration(
+      started.agentId,
+      started.runId,
+      started.name || workingName,
+      started.preferences ?? preferences,
+    );
   } catch (error) {
     console.error(error);
     setNotice(formatAiError(error), "error");
@@ -481,7 +535,7 @@ function validateNewRecipe(payload, recipeId) {
   const id = String(recipeId || payload.id || "").trim();
 
   if (!id) {
-    errors.push("请填写菜谱 ID");
+    errors.push("请先点击「AI 生成菜谱」");
   } else if (!/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(id)) {
     errors.push("菜谱 ID 只能使用小写英文、数字和连字符");
   }
@@ -546,7 +600,7 @@ async function saveCurrentForm() {
     : readRecipeForm(editForm, state.data);
 
   if (state.isNew && state.type === "recipe") {
-    const newId = new FormData(editForm).get("id")?.trim();
+    const newId = new FormData(editForm).get("id")?.trim() || state.data?.id;
     const errors = validateNewRecipe(payload, newId);
     if (errors.length) {
       setNotice(errors.join("；"), "error");
@@ -578,9 +632,9 @@ async function performSave() {
     let saved;
     const wasNew = state.isNew;
     if (state.isNew) {
-      const newId = new FormData(editForm).get("id")?.trim();
+      const newId = new FormData(editForm).get("id")?.trim() || state.data?.id;
       if (!newId) {
-        throw new Error("请填写菜谱 ID");
+        throw new Error("请先点击「AI 生成菜谱」");
       }
       saved = await api.createContent(state.type, newId, payload);
       state.isNew = false;

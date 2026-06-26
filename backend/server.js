@@ -343,22 +343,19 @@ async function handleGenerateRecipeStart(req, res) {
   }
 
   const name = String(payload?.name || '').trim();
-  const id = String(payload?.id || '').trim();
+  const preferences = String(payload?.preferences || '').trim();
   if (!name) {
     badRequest(res, '请提供菜名');
-    return;
-  }
-  if (!id || !/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(id)) {
-    badRequest(res, '请提供合法菜谱 ID（小写字母、数字、连字符）');
     return;
   }
 
   try {
     const { startRecipeGeneration } = await cursorRecipePromise;
-    const started = await startRecipeGeneration(apiKey, name, id, {
+    const started = await startRecipeGeneration(apiKey, name, {
+      preferences,
       modelId: process.env.CURSOR_MODEL_ID,
     });
-    ok(res, { ...started, name, id }, 202);
+    ok(res, { ...started, name, preferences }, 202);
   } catch (error) {
     sendJson(res, 502, { ok: false, error: { code: 'GENERATION_FAILED', message: error.message || '无法启动 AI 生成' } });
   }
@@ -379,16 +376,26 @@ async function handleGenerateRecipeStatus(req, res, url) {
   const agentId = String(url.searchParams.get('agentId') || '').trim();
   const runId = String(url.searchParams.get('runId') || '').trim();
   const name = String(url.searchParams.get('name') || '').trim();
-  const id = String(url.searchParams.get('id') || '').trim();
+  const preferences = String(url.searchParams.get('preferences') || '').trim();
+  const clientExistingIds = String(url.searchParams.get('existingIds') || '')
+    .split(',')
+    .map((item) => item.trim())
+    .filter(Boolean);
 
-  if (!agentId || !runId || !name || !id) {
-    badRequest(res, '缺少 agentId、runId、name 或 id 参数');
+  if (!agentId || !runId || !name) {
+    badRequest(res, '缺少 agentId、runId 或 name 参数');
     return;
   }
 
+  const serverExistingIds = store.listRecipes().map((item) => item.id).filter(Boolean);
+  const existingIds = [...new Set([...serverExistingIds, ...clientExistingIds])];
+
   try {
     const { pollRecipeGeneration } = await cursorRecipePromise;
-    const result = await pollRecipeGeneration(apiKey, agentId, runId, name, id);
+    const result = await pollRecipeGeneration(apiKey, agentId, runId, name, {
+      preferences,
+      existingIds,
+    });
     ok(res, result);
   } catch (error) {
     sendJson(res, 502, { ok: false, error: { code: 'GENERATION_FAILED', message: error.message || '查询生成状态失败' } });

@@ -673,22 +673,42 @@
     return { deleted, failed };
   }
 
-  async function startRecipeGeneration(name, id) {
+  async function startRecipeGeneration(name, preferences = '') {
     return unwrapResponse(await request('/api/recipes/generate', {
       method: 'POST',
       body: JSON.stringify({
         name: String(name || '').trim(),
-        id: String(id || '').trim(),
+        preferences: String(preferences || '').trim(),
       }),
     }));
   }
 
-  async function pollRecipeGeneration(agentId, runId, name, id) {
+  function collectExistingRecipeIds() {
+    const ids = new Set();
+    for (const id of Object.keys(window.recipeDetails || {})) {
+      if (id) ids.add(id);
+    }
+    for (const item of window.recipeCatalog?.recipes || []) {
+      if (item?.id) ids.add(item.id);
+    }
+    try {
+      const drafts = readDrafts('recipe');
+      for (const id of Object.keys(drafts)) {
+        if (id) ids.add(id);
+      }
+    } catch {
+      // ignore draft read errors
+    }
+    return [...ids];
+  }
+
+  async function pollRecipeGeneration(agentId, runId, name, preferences = '') {
     const qs = new URLSearchParams({
       agentId: String(agentId || '').trim(),
       runId: String(runId || '').trim(),
       name: String(name || '').trim(),
-      id: String(id || '').trim(),
+      preferences: String(preferences || '').trim(),
+      existingIds: collectExistingRecipeIds().join(','),
     });
     return unwrapResponse(await request(`/api/recipes/generate/status?${qs}`));
   }
