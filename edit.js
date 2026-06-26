@@ -16,6 +16,9 @@ const editStickyBar = document.getElementById("editStickyBar");
 const editStickyBack = document.getElementById("editStickyBack");
 const editStickyStatus = document.getElementById("editStickyStatus");
 const editStickySave = document.getElementById("editStickySave");
+const createRecipeModal = document.getElementById("createRecipeModal");
+const createRecipeSummary = document.getElementById("createRecipeSummary");
+const confirmCreateRecipeBtn = document.getElementById("confirmCreateRecipeBtn");
 
 const state = {
   type: getParam("type") || "recipe",
@@ -214,7 +217,7 @@ function renderRecipeEditor(recipe, isNew = false) {
   editBreadcrumb.textContent = isNew ? "新建菜谱" : `编辑菜谱 / ${recipe.name}`;
   editTitle.textContent = isNew ? "新建菜谱" : `编辑菜谱：${recipe.name}`;
   editDesc.textContent = isNew
-    ? "填写菜谱 ID 和基础信息后保存，即可创建新菜谱。"
+    ? "填写菜谱 ID 和菜名后，建议先点「AI 自动生成」或手动补全步骤与原材料，再点「创建菜谱」。在输入框按回车不会直接创建。"
     : "可以修改步骤、注意事项、营养数据、原材料等内容。多行字段支持按行编辑。";
   editModeHint.textContent = api.isRemoteConfigured() ? "会优先保存到后端接口" : "当前会先保存为本地草稿";
 
@@ -473,7 +476,92 @@ function readIngredientForm(form, source) {
   };
 }
 
+function validateNewRecipe(payload, recipeId) {
+  const errors = [];
+  const id = String(recipeId || payload.id || "").trim();
+
+  if (!id) {
+    errors.push("请填写菜谱 ID");
+  } else if (!/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(id)) {
+    errors.push("菜谱 ID 只能使用小写英文、数字和连字符");
+  }
+
+  if (!String(payload.name || "").trim()) {
+    errors.push("请填写菜名");
+  }
+
+  if (!String(payload.desc || "").trim()) {
+    errors.push("请填写简介");
+  }
+
+  const hasIngredients = Array.isArray(payload.ingredients)
+    && payload.ingredients.some((group) => (group.items || []).length > 0);
+  if (!hasIngredients) {
+    errors.push("请至少添加一组原材料");
+  }
+
+  if (!Array.isArray(payload.steps) || !payload.steps.length) {
+    errors.push("请至少添加一个做法步骤");
+  }
+
+  return errors;
+}
+
+function openCreateRecipeModal(payload, recipeId) {
+  if (!createRecipeModal || !createRecipeSummary) return false;
+
+  const name = String(payload.name || recipeId || "新菜谱").trim();
+  createRecipeSummary.innerHTML = `即将创建「<strong>${escapeAttr(name)}</strong>」（ID: ${escapeAttr(recipeId)}）。`;
+  createRecipeModal.hidden = false;
+  document.body.style.overflow = "hidden";
+  confirmCreateRecipeBtn?.focus();
+  return true;
+}
+
+function closeCreateRecipeModal() {
+  if (!createRecipeModal) return;
+  createRecipeModal.hidden = true;
+  document.body.style.overflow = "";
+}
+
+function bindCreateRecipeModal() {
+  if (!createRecipeModal || createRecipeModal.dataset.bound === "1") return;
+  createRecipeModal.dataset.bound = "1";
+
+  createRecipeModal.querySelectorAll("[data-close-create-modal]").forEach((node) => {
+    node.addEventListener("click", closeCreateRecipeModal);
+  });
+
+  confirmCreateRecipeBtn?.addEventListener("click", async () => {
+    closeCreateRecipeModal();
+    await performSave();
+  });
+}
+
 async function saveCurrentForm() {
+  if (!state.data || !state.canEdit || state.saving) return;
+
+  const payload = state.type === "ingredient"
+    ? readIngredientForm(editForm, state.data)
+    : readRecipeForm(editForm, state.data);
+
+  if (state.isNew && state.type === "recipe") {
+    const newId = new FormData(editForm).get("id")?.trim();
+    const errors = validateNewRecipe(payload, newId);
+    if (errors.length) {
+      setNotice(errors.join("；"), "error");
+      editStatus.textContent = "请先补全必填内容";
+      return;
+    }
+    if (openCreateRecipeModal(payload, newId)) {
+      return;
+    }
+  }
+
+  await performSave();
+}
+
+async function performSave() {
   if (!state.data || !state.canEdit || state.saving) return;
 
   try {
@@ -591,6 +679,13 @@ window.addEventListener("beforeunload", (event) => {
 
 editForm.addEventListener("input", () => setDirty(true));
 
+editForm.addEventListener("keydown", (event) => {
+  if (event.key !== "Enter") return;
+  const tag = String(event.target?.tagName || "").toLowerCase();
+  if (tag === "textarea") return;
+  event.preventDefault();
+});
+
 editForm.addEventListener("submit", async (event) => {
   event.preventDefault();
   saveCurrentForm();
@@ -605,3 +700,4 @@ window.addEventListener("keydown", (event) => {
 });
 
 load();
+bindCreateRecipeModal();

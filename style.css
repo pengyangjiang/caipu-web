@@ -147,6 +147,13 @@ input {
   line-height: 1.5;
 }
 
+.admin-menu-item[hidden],
+#newRecipeLink[hidden],
+#adminLogoutBtn[hidden],
+#adminLoginLink[hidden] {
+  display: none !important;
+}
+
 .admin-menu-item {
   display: flex;
   align-items: center;

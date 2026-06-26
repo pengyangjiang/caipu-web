@@ -110,6 +110,7 @@ function pickRecipeSummary(recipe) {
     statusTags: recipe.statusTags,
     calories: recipe.calories,
     summary: recipe.summary,
+    ingredientNames: recipe.ingredientNames,
     ingredientCount: recipe.ingredientCount,
     version: recipe.version,
     updatedAt: recipe.updatedAt,

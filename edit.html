@@ -40,6 +40,21 @@
       </div>
     </aside>
 
+    <div class="confirm-modal" id="createRecipeModal" hidden>
+      <div class="confirm-modal-backdrop" data-close-create-modal></div>
+      <div class="confirm-modal-dialog" role="dialog" aria-modal="true" aria-labelledby="createModalTitle">
+        <div class="confirm-modal-icon" aria-hidden="true">?</div>
+        <p class="confirm-modal-eyebrow">创建确认</p>
+        <h2 class="confirm-modal-title" id="createModalTitle">确认创建这道菜谱？</h2>
+        <p class="confirm-modal-desc" id="createRecipeSummary">请确认内容已填写完整，创建后将写入菜谱库。</p>
+        <p class="confirm-modal-note">建议先使用 AI 生成或手动填写步骤、原材料后再创建。</p>
+        <div class="confirm-modal-actions">
+          <button class="action-link confirm-modal-cancel" type="button" data-close-create-modal>再检查一下</button>
+          <button class="favorite-button is-active" type="button" id="confirmCreateRecipeBtn">确认创建</button>
+        </div>
+      </div>
+    </div>
+
     <script src="./data.js"></script>
     <script src="./recipe-details.js"></script>
     <script src="./ingredient-details.js"></script>

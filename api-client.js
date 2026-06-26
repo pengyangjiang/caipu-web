@@ -233,6 +233,41 @@
     return model.normalize('ingredient', merged);
   }
 
+  function deriveRecipeIngredientNames(recipe) {
+    if (Array.isArray(recipe?.ingredientNames) && recipe.ingredientNames.length) {
+      return recipe.ingredientNames;
+    }
+    if (!Array.isArray(recipe?.ingredients)) return [];
+    return recipe.ingredients.flatMap((group) => (
+      (group.items || []).map((item) => item.name).filter(Boolean)
+    ));
+  }
+
+  function mergeRecipeSnapshot(existing, incoming) {
+    if (!incoming) return existing ? model.normalize('recipe', existing) : null;
+    if (!existing) return model.normalize('recipe', incoming);
+
+    const merged = { ...existing, ...incoming };
+    const existingNames = deriveRecipeIngredientNames(existing);
+    const incomingNames = deriveRecipeIngredientNames(incoming);
+
+    if (!incomingNames.length && existingNames.length) {
+      merged.ingredientNames = existingNames;
+      merged.ingredientCount = Number(existing.ingredientCount || existingNames.length);
+    } else if (incomingNames.length) {
+      merged.ingredientNames = incomingNames;
+      merged.ingredientCount = Number(incoming.ingredientCount || incomingNames.length);
+    }
+
+    if (!Array.isArray(merged.ingredients) || !merged.ingredients.length) {
+      if (Array.isArray(existing.ingredients) && existing.ingredients.length) {
+        merged.ingredients = existing.ingredients;
+      }
+    }
+
+    return model.normalize('recipe', merged);
+  }
+
   function upsertLocalIngredients(catalogItems, options = {}) {
     if (!Array.isArray(catalogItems) || !catalogItems.length) {
       return { created: [], updated: [], skipped: [] };
@@ -330,6 +365,16 @@
       } catch {
         // fall back to draft / seed data
       }
+    }
+
+    if (type === 'ingredient') {
+      const candidates = [
+        seedRecord ? model.normalize(type, seedRecord) : null,
+        draft ? model.normalize(type, draft) : null,
+        remoteRecord,
+      ].filter(Boolean);
+      if (!candidates.length) return null;
+      return candidates.reduce((merged, item) => mergeIngredientSnapshot(merged, item), null);
     }
 
     return pickLatestContent([
@@ -638,7 +683,7 @@
     );
     for (const item of remoteList) {
       if (!item?.id || deleted.has(item.id)) continue;
-      byId.set(item.id, { ...(byId.get(item.id) || {}), ...item });
+      byId.set(item.id, mergeRecipeSnapshot(byId.get(item.id), item));
     }
     catalog.recipes = Array.from(byId.values());
     return catalog;

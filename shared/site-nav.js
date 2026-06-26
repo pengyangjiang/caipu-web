@@ -73,7 +73,7 @@
       return refreshAdminStatus();
     }
 
-    if (session.isAdmin) {
+    if (session.isAdmin || (session.hasToken && api.canEdit())) {
       adminStatus.textContent = session.checkedRemote ? "当前已登录管理员" : "已保存登录信息";
       if (adminLoginLink) adminLoginLink.hidden = true;
       if (adminLogoutBtn) adminLogoutBtn.hidden = false;

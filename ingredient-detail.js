@@ -78,7 +78,9 @@ function getIngredientNutrientRows(ingredient, reference) {
 
 function recipeUsesIngredient(recipe, ingredient) {
   const names = [ingredient.name, ...(ingredient.aliases || [])].map(normalizeText);
-  const recipeIngredients = recipe.ingredientNames || [];
+  const recipeIngredients = Array.isArray(recipe.ingredientNames) && recipe.ingredientNames.length
+    ? recipe.ingredientNames
+    : (recipe.ingredients || []).flatMap((group) => (group.items || []).map((item) => item.name));
   return recipeIngredients.some((name) => {
     const itemText = normalizeText(name);
     return names.some((needle) => itemText.includes(needle) || needle.includes(itemText));
@@ -261,17 +263,19 @@ function renderIngredientPage(ingredient) {
         <p class="section-note">做菜前先看看这些注意事项</p>
       </div>
     </div>
-    <div class="ingredient-tip-list">
-      ${renderList(
-        notes,
-        (item) => `
-          <article class="ingredient-tip">
-            <strong>${item.label}</strong>
-            <div>${item.text}</div>
-          </article>
-        `
-      )}
-    </div>
+    ${
+      notes.length
+        ? `<div class="ingredient-tip-list">${renderList(
+            notes,
+            (item) => `
+              <article class="ingredient-tip">
+                <strong>${item.label}</strong>
+                <div>${item.text}</div>
+              </article>
+            `
+          )}</div>`
+        : renderEmpty("暂无处理要点。若由 AI 创建菜谱，保存时会同步写入；也可在编辑页手动补充。")
+    }
   `;
 
   const relatedRecipes = getRelatedRecipes(ingredient);
@@ -317,6 +321,17 @@ function renderIngredientPage(ingredient) {
 }
 
 (async function init() {
+  if (contentApi?.listRecipes && catalog) {
+    try {
+      const remoteRecipes = await contentApi.listRecipes();
+      if (Array.isArray(remoteRecipes)) {
+        contentApi.mergeCatalogRecipes(catalog, remoteRecipes);
+      }
+    } catch {
+      // fall back to bundled catalog
+    }
+  }
+
   if (contentApi?.syncCatalogIngredients && catalog) {
     await contentApi.syncCatalogIngredients(catalog);
   }
