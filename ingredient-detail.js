@@ -400,15 +400,10 @@ function renderIngredientPage(ingredient) {
     canManage = false;
   }
 
-  if (contentApi?.listRecipes && catalog) {
-    try {
-      const remoteRecipes = await contentApi.listRecipes();
-      if (Array.isArray(remoteRecipes)) {
-        contentApi.mergeCatalogRecipes(catalog, remoteRecipes);
-      }
-    } catch {
-      // fall back to bundled catalog
-    }
+  if (contentApi?.syncCatalogRecipes && catalog) {
+    await contentApi.syncCatalogRecipes(catalog);
+  } else if (contentApi?.mergeCatalogRecipes && catalog) {
+    contentApi.mergeCatalogRecipes(catalog, []);
   }
 
   if (contentApi?.syncCatalogIngredients && catalog) {

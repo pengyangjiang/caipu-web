@@ -243,15 +243,11 @@ async function confirmBatchDelete() {
 }
 
 async function syncRecipeCatalog() {
-  if (!api?.listRecipes) return;
-  try {
-    const remoteList = await api.listRecipes();
-    if (Array.isArray(remoteList) && remoteList.length > 0) {
-      api.mergeCatalogRecipes(catalog, remoteList);
-    }
-  } catch {
-    // fall back to bundled catalog
+  if (api?.syncCatalogRecipes) {
+    await api.syncCatalogRecipes(catalog);
+    return;
   }
+  api.mergeCatalogRecipes?.(catalog, []);
 }
 
 function bindBatchModal() {

@@ -39,11 +39,11 @@ const INGREDIENT_CHIP_LIMIT = 6;
 document.title = "菜谱搜索页";
 
 async function syncRecipeCatalog() {
-  if (!api?.listRecipes) return;
-  const remoteList = await api.listRecipes();
-  if (Array.isArray(remoteList) && remoteList.length > 0) {
-    api.mergeCatalogRecipes(catalog, remoteList);
+  if (api?.syncCatalogRecipes) {
+    await api.syncCatalogRecipes(catalog);
+    return;
   }
+  api.mergeCatalogRecipes?.(catalog, []);
 }
 
 function renderEmpty(message) {

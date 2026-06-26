@@ -400,6 +400,7 @@
     const draft = readDrafts(type)[id] || null;
     const seedRecord = getSourceMap(type)[id] || null;
     let remoteRecord = null;
+    let remoteMissing = false;
 
     if (hasRemote) {
       try {
@@ -410,8 +411,11 @@
         if (data) {
           remoteRecord = model.normalize(type, data);
         }
-      } catch {
-        // fall back to draft / seed data
+      } catch (error) {
+        if (type === 'recipe' && (error.status === 404 || error.code === 'NOT_FOUND')) {
+          remoteMissing = true;
+        }
+        // fall back to draft / seed data when appropriate
       }
     }
 
@@ -423,6 +427,12 @@
       ].filter(Boolean);
       if (!candidates.length) return null;
       return candidates.reduce((merged, item) => mergeIngredientSnapshot(merged, item), null);
+    }
+
+    if (hasRemote && type === 'recipe') {
+      if (remoteRecord) return remoteRecord;
+      if (draft) return model.normalize(type, draft);
+      if (remoteMissing) return null;
     }
 
     return pickLatestContent([
@@ -780,9 +790,18 @@
     return catalog;
   }
 
-  function mergeCatalogRecipes(catalog, remoteList) {
+  function mergeCatalogRecipes(catalog, remoteList, options = {}) {
     if (!catalog || !Array.isArray(remoteList)) return catalog;
     const deleted = readDeletedRecipeIds();
+
+    if (options.remoteAuthoritative) {
+      catalog.recipes = remoteList
+        .filter((item) => item?.id && !deleted.has(item.id))
+        .map((item) => mergeRecipeSnapshot(null, item))
+        .sort((a, b) => String(a.name || '').localeCompare(String(b.name || ''), 'zh-CN'));
+      return catalog;
+    }
+
     const byId = new Map(
       (catalog.recipes || [])
         .filter((item) => item?.id && !deleted.has(item.id))
@@ -792,8 +811,33 @@
       if (!item?.id || deleted.has(item.id)) continue;
       byId.set(item.id, mergeRecipeSnapshot(byId.get(item.id), item));
     }
-    catalog.recipes = Array.from(byId.values());
+    catalog.recipes = Array.from(byId.values()).sort((a, b) => (
+      String(a.name || '').localeCompare(String(b.name || ''), 'zh-CN')
+    ));
     return catalog;
+  }
+
+  async function syncCatalogRecipes(catalog) {
+    if (!catalog) return catalog;
+
+    if (hasRemote) {
+      try {
+        const data = unwrapResponse(await request('/api/recipes'));
+        if (Array.isArray(data)) {
+          const remoteList = data.filter((item) => item?.id && !isRecipeDeleted(item.id));
+          return mergeCatalogRecipes(catalog, remoteList, { remoteAuthoritative: true });
+        }
+      } catch {
+        // fall back to local drafts / seed summaries
+      }
+    }
+
+    const localList = await listRecipes();
+    return mergeCatalogRecipes(
+      catalog,
+      Array.isArray(localList) ? localList : [],
+      { remoteAuthoritative: true },
+    );
   }
 
   function isRemoteConfigured() {
@@ -894,6 +938,7 @@
     listIngredients,
     syncIngredientCatalog,
     mergeCatalogRecipes,
+    syncCatalogRecipes,
     mergeCatalogIngredients,
     syncCatalogIngredients,
     applyRecipeIngredientLinks,

@@ -982,11 +982,10 @@ function syncCoverImageState(recipe) {
     }
   });
 
-  if (contentApi?.listRecipes) {
-    const remoteList = await contentApi.listRecipes();
-    if (Array.isArray(remoteList) && remoteList.length > 0) {
-      contentApi.mergeCatalogRecipes(catalog, remoteList);
-    }
+  if (contentApi?.syncCatalogRecipes) {
+    await contentApi.syncCatalogRecipes(catalog);
+  } else {
+    contentApi.mergeCatalogRecipes?.(catalog, []);
   }
 
   if (contentApi?.syncCatalogIngredients) {
