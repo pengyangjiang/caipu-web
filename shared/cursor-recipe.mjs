@@ -25,7 +25,10 @@ function buildRecipePrompt(name, id) {
       "category": "蛋白质",
       "unit": "100g",
       "caloriesPer100g": 133,
-      "nutritionPer100g": { "protein": 22.3, "fat": 5, "carbs": 0, "fiber": 0 }
+      "nutritionPer100g": { "protein": 22.3, "fat": 5, "carbs": 0, "fiber": 0 },
+      "handlingTips": ["解冻后擦干表面水分再烹饪", "逆纹切片口感更嫩"],
+      "storageTips": ["冷藏 1-2 天内食用", "可分装冷冻保存 1 个月"],
+      "cookingNotes": ["适合煎、烤、水煮", "不宜久煮以免发柴"]
     }
   ],
   "steps": [{ "title": "步骤标题", "content": "步骤内容", "time": "5 分钟" }],
@@ -34,7 +37,7 @@ function buildRecipePrompt(name, id) {
 }
 
 注意：数值合理、步骤 3-6 步、食材分组清晰、使用简体中文。
-ingredientCatalog 需覆盖菜谱中出现的每一种食材（含调料），id 使用小写英文连字符，category 从「蛋白质、蔬菜、主食、调味料、乳制品、油脂、香辛料、其他」中选择，并给出合理的每100g营养值。`;
+ingredientCatalog 需覆盖菜谱中出现的每一种食材（含调料），id 使用小写英文连字符，category 从「蛋白质、蔬菜、主食、调味料、乳制品、油脂、香辛料、其他」中选择，并给出合理的每100g营养值；每种食材还需填写 handlingTips（2-3 条处理要点）、storageTips（1-2 条保存建议）、cookingNotes（1-2 条烹饪建议），均为中文短句数组。`;
 }
 
 function extractJsonObject(text) {

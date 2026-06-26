@@ -198,6 +198,41 @@
     };
   }
 
+  function hasIngredientNutrition(ingredient) {
+    if (!ingredient) return false;
+    const n = ingredient.nutritionPer100g || {};
+    return Number(ingredient.caloriesPer100g || 0) > 0
+      || Number(n.protein || 0) > 0
+      || Number(n.fat || 0) > 0
+      || Number(n.carbs || 0) > 0
+      || Number(n.fiber || 0) > 0;
+  }
+
+  function mergeIngredientSnapshot(existing, incoming) {
+    if (!incoming) return existing ? model.normalize('ingredient', existing) : null;
+    if (!existing) return model.normalize('ingredient', incoming);
+
+    const merged = { ...existing, ...incoming };
+    if (!hasIngredientNutrition(incoming) && hasIngredientNutrition(existing)) {
+      merged.caloriesPer100g = existing.caloriesPer100g;
+      merged.nutritionPer100g = existing.nutritionPer100g;
+    }
+
+    for (const key of ['handlingTips', 'storageTips', 'cookingNotes']) {
+      const existingTips = Array.isArray(existing[key]) ? existing[key].filter(Boolean) : [];
+      const incomingTips = Array.isArray(incoming[key]) ? incoming[key].filter(Boolean) : [];
+      if (!incomingTips.length) {
+        merged[key] = existingTips;
+      } else if (!existingTips.length) {
+        merged[key] = incomingTips;
+      } else {
+        merged[key] = [...new Set([...existingTips, ...incomingTips])];
+      }
+    }
+
+    return model.normalize('ingredient', merged);
+  }
+
   function upsertLocalIngredients(catalogItems, options = {}) {
     if (!Array.isArray(catalogItems) || !catalogItems.length) {
       return { created: [], updated: [], skipped: [] };
@@ -576,17 +611,14 @@
     for (const item of Object.values(details)) {
       if (!item?.id) continue;
       const listItem = pickIngredientListItem(item);
-      byId.set(item.id, { ...(byId.get(item.id) || {}), ...listItem });
+      byId.set(item.id, mergeIngredientSnapshot(byId.get(item.id), listItem));
     }
 
     if (Array.isArray(remoteList)) {
       for (const item of remoteList) {
         if (!item?.id) continue;
-        byId.set(item.id, { ...(byId.get(item.id) || {}), ...item });
-        details[item.id] = model.normalize('ingredient', {
-          ...(details[item.id] || {}),
-          ...item,
-        });
+        byId.set(item.id, mergeIngredientSnapshot(byId.get(item.id), item));
+        details[item.id] = mergeIngredientSnapshot(details[item.id], item);
       }
     }
 

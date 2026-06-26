@@ -42,9 +42,15 @@ function normalizeCatalogEntry(raw) {
       carbs: Number(raw.nutritionPer100g?.carbs || 0),
       fiber: Number(raw.nutritionPer100g?.fiber || 0),
     },
-    handlingTips: Array.isArray(raw.handlingTips) ? raw.handlingTips : [],
-    storageTips: Array.isArray(raw.storageTips) ? raw.storageTips : [],
-    cookingNotes: Array.isArray(raw.cookingNotes) ? raw.cookingNotes : [],
+    handlingTips: Array.isArray(raw.handlingTips)
+      ? raw.handlingTips.map((item) => String(item || '').trim()).filter(Boolean)
+      : [],
+    storageTips: Array.isArray(raw.storageTips)
+      ? raw.storageTips.map((item) => String(item || '').trim()).filter(Boolean)
+      : [],
+    cookingNotes: Array.isArray(raw.cookingNotes)
+      ? raw.cookingNotes.map((item) => String(item || '').trim()).filter(Boolean)
+      : [],
     source: raw.source || 'ai',
   };
 }
@@ -107,6 +113,25 @@ function linkRecipeNamesToCatalog(ingredientsMap, recipeIngredientNames) {
   }
 }
 
+function mergeTextTipArrays(existing, incoming, keepExistingIfManual) {
+  const a = (Array.isArray(existing) ? existing : []).map((item) => String(item || '').trim()).filter(Boolean);
+  const b = (Array.isArray(incoming) ? incoming : []).map((item) => String(item || '').trim()).filter(Boolean);
+  if (keepExistingIfManual && a.length) return a;
+  if (!b.length) return a;
+  if (!a.length) return b;
+  return [...new Set([...a, ...b])];
+}
+
+function hasNutritionData(entry) {
+  if (!entry) return false;
+  const n = entry.nutritionPer100g || {};
+  return Number(entry.caloriesPer100g || 0) > 0
+    || Number(n.protein || 0) > 0
+    || Number(n.fat || 0) > 0
+    || Number(n.carbs || 0) > 0
+    || Number(n.fiber || 0) > 0;
+}
+
 function mergeCatalogEntry(existing, incoming) {
   const aliases = [...new Set([
     ...(existing.aliases || []),
@@ -115,8 +140,9 @@ function mergeCatalogEntry(existing, incoming) {
     incoming.name,
   ].filter(Boolean))];
 
-  const existingHasNutrition = Number(existing.caloriesPer100g || 0) > 0;
-  const incomingHasNutrition = Number(incoming.caloriesPer100g || 0) > 0;
+  const existingHasNutrition = hasNutritionData(existing);
+  const incomingHasNutrition = hasNutritionData(incoming);
+  const keepExistingTips = existing.source === 'manual';
 
   return {
     ...existing,
@@ -143,6 +169,9 @@ function mergeCatalogEntry(existing, incoming) {
         ? Number(existing.nutritionPer100g?.fiber || 0)
         : Math.max(Number(existing.nutritionPer100g?.fiber || 0), Number(incoming.nutritionPer100g?.fiber || 0)),
     },
+    handlingTips: mergeTextTipArrays(existing.handlingTips, incoming.handlingTips, keepExistingTips),
+    storageTips: mergeTextTipArrays(existing.storageTips, incoming.storageTips, keepExistingTips),
+    cookingNotes: mergeTextTipArrays(existing.cookingNotes, incoming.cookingNotes, keepExistingTips),
     source: existing.source === 'manual' ? 'manual' : (incoming.source || existing.source || 'ai'),
     version: Number(existing.version || 1),
     createdAt: existing.createdAt,

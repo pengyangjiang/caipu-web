@@ -124,6 +124,7 @@ function pickIngredientSummary(ingredient) {
     category: ingredient.category,
     unit: ingredient.unit,
     caloriesPer100g: ingredient.caloriesPer100g,
+    nutritionPer100g: ingredient.nutritionPer100g,
     version: ingredient.version,
     updatedAt: ingredient.updatedAt,
   };
