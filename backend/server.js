@@ -3,6 +3,7 @@ const fs = require('node:fs');
 const path = require('node:path');
 const { URL } = require('node:url');
 const { createStore } = require('./store');
+const { ensureRecipeIngredientCatalog } = require('../shared/ingredient-sync');
 
 const store = createStore();
 const cursorRecipePromise = import('../shared/cursor-recipe.mjs');
@@ -396,6 +397,9 @@ async function handleGenerateRecipeStatus(req, res, url) {
       preferences,
       existingIds,
     });
+    if (result?.recipe) {
+      result.recipe.ingredientCatalog = ensureRecipeIngredientCatalog(result.recipe);
+    }
     ok(res, result);
   } catch (error) {
     sendJson(res, 502, { ok: false, error: { code: 'GENERATION_FAILED', message: error.message || '查询生成状态失败' } });

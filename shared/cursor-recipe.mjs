@@ -92,7 +92,9 @@ function buildRecipePrompt(workingName, preferences) {
 
 注意：数值合理、步骤 3-6 步、食材分组清晰、使用简体中文。
 id 只能包含小写英文字母、数字和连字符；name 必须是中文菜名。
-ingredientCatalog 需覆盖菜谱中出现的每一种食材（含调料），id 使用小写英文连字符，category 从「蛋白质、蔬菜、主食、调味料、乳制品、油脂、香辛料、其他」中选择，并给出合理的每100g营养值；每种食材还需填写 handlingTips（2-3 条处理要点）、storageTips（1-2 条保存建议）、cookingNotes（1-2 条烹饪建议），均为中文短句数组。`;
+ingredientCatalog 必须覆盖 ingredients 中出现的每一种食材（含全部主料与调料），不可遗漏任何一项。
+ingredientCatalog 中每种食材的 handlingTips、storageTips、cookingNotes 必须是通用知识，只描述该食材本身；不要提及具体菜名，不要写「用于某道菜」「配合番茄/鸡蛋」等针对单一菜谱的表述。
+ingredientCatalog 每种食材：id 使用小写英文连字符，category 从「蛋白质、蔬菜、主食、调味料、乳制品、油脂、香辛料、其他」中选择，并给出合理的每100g营养值；handlingTips 2-3 条、storageTips 1-2 条、cookingNotes 1-2 条，均为中文短句数组。`;
 }
 
 function extractJsonObject(text) {

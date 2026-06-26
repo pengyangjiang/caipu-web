@@ -412,7 +412,7 @@
           remoteRecord = model.normalize(type, data);
         }
       } catch (error) {
-        if (type === 'recipe' && (error.status === 404 || error.code === 'NOT_FOUND')) {
+        if (error.status === 404 || error.code === 'NOT_FOUND') {
           remoteMissing = true;
         }
         // fall back to draft / seed data when appropriate
@@ -420,6 +420,12 @@
     }
 
     if (type === 'ingredient') {
+      if (hasRemote) {
+        if (remoteRecord) return remoteRecord;
+        if (draft) return model.normalize(type, draft);
+        if (remoteMissing) return null;
+      }
+
       const candidates = [
         seedRecord ? model.normalize(type, seedRecord) : null,
         draft ? model.normalize(type, draft) : null,
@@ -495,7 +501,7 @@
 
     const normalizedId = String(id || '').trim();
     const stripFn = window.ingredientSync?.stripIngredientCatalog;
-    const { recipePayload, ingredientCatalog } = stripFn
+    const { recipePayload, ingredientCatalog: rawCatalog } = stripFn
       ? stripFn(payload)
       : { recipePayload: payload, ingredientCatalog: [] };
 
@@ -505,6 +511,14 @@
       version: 1,
       updatedAt: model.now(),
     });
+
+    let ingredientCatalog = Array.isArray(rawCatalog) ? rawCatalog : [];
+    if (window.ingredientSync?.ensureRecipeIngredientCatalog) {
+      ingredientCatalog = window.ingredientSync.ensureRecipeIngredientCatalog({
+        ...normalized,
+        ingredientCatalog,
+      });
+    }
 
     lastSaveTarget = 'local';
     lastSaveFailure = '';
@@ -752,6 +766,36 @@
       .map((item) => pickIngredientListItem(item));
   }
 
+  async function backfillRecipeIngredients(recipe) {
+    if (!recipe || !window.ingredientSync?.ensureRecipeIngredientCatalog) {
+      return null;
+    }
+
+    const names = window.ingredientSync.collectRecipeIngredientNames(recipe);
+    if (!names.length) return null;
+
+    const missing = names.filter((name) => !window.ingredientSync.resolveIngredientByName(name, {
+      catalogIngredients: window.recipeCatalog?.ingredients || [],
+      catalogOnly: true,
+    }));
+    if (!missing.length) return null;
+
+    const items = window.ingredientSync.ensureRecipeIngredientCatalog({
+      ...recipe,
+      ingredientCatalog: [],
+    });
+
+    try {
+      const result = await syncIngredientCatalog(items);
+      if (window.recipeCatalog) {
+        await syncCatalogIngredients(window.recipeCatalog);
+      }
+      return result;
+    } catch {
+      return null;
+    }
+  }
+
   async function syncIngredientCatalog(items) {
     if (!Array.isArray(items) || !items.length) {
       return { created: [], updated: [], skipped: [] };
@@ -957,6 +1001,7 @@
     listRecipes,
     listIngredients,
     syncIngredientCatalog,
+    backfillRecipeIngredients,
     mergeCatalogRecipes,
     syncCatalogRecipes,
     mergeCatalogIngredients,

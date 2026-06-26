@@ -1,6 +1,6 @@
 import { startRecipeGeneration, pollRecipeGeneration } from '../../shared/cursor-recipe.mjs';
 import { ensureNutritionProfile } from '../../shared/nutrition-profile.js';
-import { upsertIngredientCatalog, stripIngredientCatalog } from '../../shared/ingredient-sync.js';
+import { upsertIngredientCatalog, stripIngredientCatalog, ensureRecipeIngredientCatalog } from '../../shared/ingredient-sync.js';
 import {
   getClientIpFromRequest,
   checkLoginRateLimit,
@@ -495,6 +495,9 @@ async function handleGenerateRecipeStatus(request, env) {
       preferences,
       existingIds,
     });
+    if (result?.recipe) {
+      result.recipe.ingredientCatalog = ensureRecipeIngredientCatalog(result.recipe);
+    }
     return ok(result);
   } catch (error) {
     if (error.code === 'GENERATION_FAILED') {

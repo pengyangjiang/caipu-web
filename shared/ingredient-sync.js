@@ -69,6 +69,91 @@ function findIngredientByName(ingredientsMap, name) {
   return null;
 }
 
+function guessIngredientCategory(name) {
+  const text = String(name || '').trim();
+  if (!text) return '其他';
+  if (/油|黄油|奶油|猪油|橄榄油|葵花籽油/.test(text)) return '油脂';
+  if (/盐|糖|酱油|醋|料酒|蚝油|味精|鸡精|淀粉|小苏打|发酵粉|番茄酱|豆瓣/.test(text)) return '调味料';
+  if (/胡椒|辣椒|花椒|八角|桂皮|香叶|姜|蒜|葱|香菜|孜然/.test(text)) return '香辛料';
+  if (/奶|乳|芝士|奶酪|酸奶/.test(text)) return '乳制品';
+  if (/米|面|粉|馒头|面包|燕麦|意面|面条|土豆|红薯|玉米/.test(text)) return '主食';
+  if (/鸡|鸭|鱼|虾|蟹|贝|肉|猪|牛|羊|蛋|豆腐|豆干|蛋白/.test(text)) return '蛋白质';
+  if (/菜|瓜|果|菇|菌|笋|芹|菠|白|生|黄|茄|豆|芽|花|椰/.test(text)) return '蔬菜';
+  return '其他';
+}
+
+function collectRecipeIngredientNames(recipe) {
+  if (Array.isArray(recipe?.ingredientNames) && recipe.ingredientNames.length) {
+    return recipe.ingredientNames.map((item) => String(item || '').trim()).filter(Boolean);
+  }
+  if (!Array.isArray(recipe?.ingredients)) return [];
+  return recipe.ingredients.flatMap((group) => (
+    (group.items || []).map((item) => String(item.name || '').trim()).filter(Boolean)
+  ));
+}
+
+function sanitizeIngredientTips(tips, ingredientName, otherIngredientNames = [], recipeName = '') {
+  const selfKey = normalizeIngredientName(ingredientName);
+  const dishName = String(recipeName || '').trim();
+  return (Array.isArray(tips) ? tips : [])
+    .map((item) => String(item || '').trim())
+    .filter(Boolean)
+    .filter((tip) => {
+      if (dishName && tip.includes(dishName)) return false;
+      for (const other of otherIngredientNames) {
+        const otherName = String(other || '').trim();
+        if (!otherName || normalizeIngredientName(otherName) === selfKey) continue;
+        if (tip.includes(otherName)) return false;
+      }
+      return true;
+    });
+}
+
+function findCatalogEntryByName(catalog, name) {
+  const target = normalizeIngredientName(name);
+  if (!target) return null;
+  for (const entry of catalog || []) {
+    if (!entry) continue;
+    if (normalizeIngredientName(entry.name) === target) return entry;
+    if ((entry.aliases || []).some((alias) => normalizeIngredientName(alias) === target)) {
+      return entry;
+    }
+  }
+  return null;
+}
+
+function ensureRecipeIngredientCatalog(recipe) {
+  const catalog = (Array.isArray(recipe?.ingredientCatalog) ? recipe.ingredientCatalog : [])
+    .map((item) => normalizeCatalogEntry(item))
+    .filter(Boolean);
+  const recipeNames = collectRecipeIngredientNames(recipe);
+
+  for (const name of recipeNames) {
+    if (findCatalogEntryByName(catalog, name)) continue;
+
+    catalog.push(normalizeCatalogEntry({
+      id: slugifyIngredientId(name),
+      name,
+      aliases: [name],
+      category: guessIngredientCategory(name),
+      unit: '100g',
+      caloriesPer100g: 0,
+      nutritionPer100g: { protein: 0, fat: 0, carbs: 0, fiber: 0 },
+      handlingTips: [],
+      storageTips: [],
+      cookingNotes: [],
+      source: 'ai',
+    }));
+  }
+
+  return catalog.map((entry) => ({
+    ...entry,
+    handlingTips: sanitizeIngredientTips(entry.handlingTips, entry.name, recipeNames, recipe?.name),
+    storageTips: sanitizeIngredientTips(entry.storageTips, entry.name, recipeNames, recipe?.name),
+    cookingNotes: sanitizeIngredientTips(entry.cookingNotes, entry.name, recipeNames, recipe?.name),
+  }));
+}
+
 function resolveIngredientByName(name, options = {}) {
   const catalogIngredients = options.catalogIngredients || [];
   const ingredientDetails = options.ingredientDetails || {};
@@ -82,6 +167,8 @@ function resolveIngredientByName(name, options = {}) {
       return item;
     }
   }
+
+  if (options.catalogOnly) return null;
 
   return findIngredientByName(ingredientDetails, name);
 }
@@ -143,6 +230,7 @@ function mergeCatalogEntry(existing, incoming) {
   const existingHasNutrition = hasNutritionData(existing);
   const incomingHasNutrition = hasNutritionData(incoming);
   const keepExistingTips = existing.source === 'manual';
+  const replaceAiTips = incoming.source === 'ai';
 
   return {
     ...existing,
@@ -169,9 +257,15 @@ function mergeCatalogEntry(existing, incoming) {
         ? Number(existing.nutritionPer100g?.fiber || 0)
         : Math.max(Number(existing.nutritionPer100g?.fiber || 0), Number(incoming.nutritionPer100g?.fiber || 0)),
     },
-    handlingTips: mergeTextTipArrays(existing.handlingTips, incoming.handlingTips, keepExistingTips),
-    storageTips: mergeTextTipArrays(existing.storageTips, incoming.storageTips, keepExistingTips),
-    cookingNotes: mergeTextTipArrays(existing.cookingNotes, incoming.cookingNotes, keepExistingTips),
+    handlingTips: replaceAiTips
+      ? [...(incoming.handlingTips || [])]
+      : mergeTextTipArrays(existing.handlingTips, incoming.handlingTips, keepExistingTips),
+    storageTips: replaceAiTips
+      ? [...(incoming.storageTips || [])]
+      : mergeTextTipArrays(existing.storageTips, incoming.storageTips, keepExistingTips),
+    cookingNotes: replaceAiTips
+      ? [...(incoming.cookingNotes || [])]
+      : mergeTextTipArrays(existing.cookingNotes, incoming.cookingNotes, keepExistingTips),
     source: existing.source === 'manual' ? 'manual' : (incoming.source || existing.source || 'ai'),
     version: Number(existing.version || 1),
     createdAt: existing.createdAt,
@@ -243,6 +337,9 @@ if (typeof module !== 'undefined') {
     linkRecipeNamesToCatalog,
     upsertIngredientCatalog,
     stripIngredientCatalog,
+    ensureRecipeIngredientCatalog,
+    sanitizeIngredientTips,
+    collectRecipeIngredientNames,
   };
 }
 
@@ -256,5 +353,8 @@ if (typeof window !== 'undefined') {
     linkRecipeNamesToCatalog,
     upsertIngredientCatalog,
     stripIngredientCatalog,
+    ensureRecipeIngredientCatalog,
+    sanitizeIngredientTips,
+    collectRecipeIngredientNames,
   };
 }

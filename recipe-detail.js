@@ -58,6 +58,7 @@ function getIngredientByName(name) {
     return window.ingredientSync.resolveIngredientByName(name, {
       catalogIngredients: catalog.ingredients,
       ingredientDetails: window.ingredientDetails,
+      catalogOnly: Boolean(contentApi?.isRemoteConfigured?.()),
     });
   }
 
@@ -993,6 +994,12 @@ function syncCoverImageState(recipe) {
   }
 
   const recipe = await contentApi.loadContent("recipe", getRecipeIdFromQuery());
+  if (recipe) {
+    await contentApi.backfillRecipeIngredients?.(recipe);
+    if (contentApi.syncCatalogIngredients) {
+      await contentApi.syncCatalogIngredients(catalog);
+    }
+  }
   if (recipe?.ingredientNames?.length && contentApi.applyRecipeIngredientLinks) {
     contentApi.applyRecipeIngredientLinks(recipe.ingredientNames);
   }

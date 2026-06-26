@@ -83,6 +83,7 @@ function getIngredientByName(name) {
     return window.ingredientSync.resolveIngredientByName(name, {
       catalogIngredients: catalog.ingredients,
       ingredientDetails: window.ingredientDetails,
+      catalogOnly: Boolean(api?.isRemoteConfigured?.()),
     });
   }
 
