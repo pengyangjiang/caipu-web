@@ -22,25 +22,27 @@
 
       <section class="panel ingredients-shell">
         <div class="ingredients-toolbar is-sticky">
-          <label class="search-bar ingredients-search" for="ingredientsSearch">
-            <span class="search-icon">⌕</span>
-            <input
-              id="ingredientsSearch"
-              type="search"
-              placeholder="搜索食材名称、别名..."
-              autocomplete="off"
-            />
-          </label>
-          <div class="list-batch-toolbar">
-            <button class="action-link" type="button" id="ingredientsBatchToggleBtn" hidden>批量管理</button>
-            <div class="list-batch-bar" id="ingredientsBatchBar" hidden>
-              <label class="list-batch-select-all">
-                <input type="checkbox" id="ingredientsSelectAll" />
-                <span>全选当前列表</span>
-              </label>
-              <span class="list-batch-count" id="ingredientsBatchCount">已选 0 种</span>
-              <button class="action-link toolbar-danger" type="button" id="ingredientsBatchDeleteBtn" disabled>删除所选</button>
+          <div class="list-toolbar-row">
+            <label class="search-bar ingredients-search" for="ingredientsSearch">
+              <span class="search-icon">⌕</span>
+              <input
+                id="ingredientsSearch"
+                type="search"
+                placeholder="搜索食材名称、别名..."
+                autocomplete="off"
+              />
+            </label>
+            <div class="list-batch-toolbar" id="ingredientsBatchToolbar" hidden>
+              <button class="list-batch-toggle" type="button" id="ingredientsBatchToggleBtn">批量管理</button>
             </div>
+          </div>
+          <div class="list-batch-bar" id="ingredientsBatchBar" hidden>
+            <label class="list-batch-select-all">
+              <input type="checkbox" id="ingredientsSelectAll" />
+              <span>全选当前列表</span>
+            </label>
+            <span class="list-batch-count" id="ingredientsBatchCount">已选 0 种</span>
+            <button class="list-batch-delete" type="button" id="ingredientsBatchDeleteBtn" disabled>删除所选</button>
           </div>
           <div class="category-row" id="ingredientsCategoryChips"></div>
           <p class="ingredients-meta" id="ingredientsMeta">正在加载食材...</p>

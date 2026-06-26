@@ -22,25 +22,27 @@
 
       <section class="panel recipes-shell">
         <div class="recipes-toolbar is-sticky">
-          <label class="search-bar recipes-search" for="recipesSearch">
-            <span class="search-icon">⌕</span>
-            <input
-              id="recipesSearch"
-              type="search"
-              placeholder="搜索菜名、标签、食材..."
-              autocomplete="off"
-            />
-          </label>
-          <div class="list-batch-toolbar">
-            <button class="action-link" type="button" id="recipesBatchToggleBtn" hidden>批量管理</button>
-            <div class="list-batch-bar" id="recipesBatchBar" hidden>
-              <label class="list-batch-select-all">
-                <input type="checkbox" id="recipesSelectAll" />
-                <span>全选当前列表</span>
-              </label>
-              <span class="list-batch-count" id="recipesBatchCount">已选 0 道菜</span>
-              <button class="action-link toolbar-danger" type="button" id="recipesBatchDeleteBtn" disabled>删除所选</button>
+          <div class="list-toolbar-row">
+            <label class="search-bar recipes-search" for="recipesSearch">
+              <span class="search-icon">⌕</span>
+              <input
+                id="recipesSearch"
+                type="search"
+                placeholder="搜索菜名、标签、食材..."
+                autocomplete="off"
+              />
+            </label>
+            <div class="list-batch-toolbar" id="recipesBatchToolbar" hidden>
+              <button class="list-batch-toggle" type="button" id="recipesBatchToggleBtn">批量管理</button>
             </div>
+          </div>
+          <div class="list-batch-bar" id="recipesBatchBar" hidden>
+            <label class="list-batch-select-all">
+              <input type="checkbox" id="recipesSelectAll" />
+              <span>全选当前列表</span>
+            </label>
+            <span class="list-batch-count" id="recipesBatchCount">已选 0 道菜</span>
+            <button class="list-batch-delete" type="button" id="recipesBatchDeleteBtn" disabled>删除所选</button>
           </div>
           <div class="category-row" id="recipesCategoryChips"></div>
           <p class="recipes-meta" id="recipesMeta">正在加载菜品...</p>

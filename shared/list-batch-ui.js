@@ -60,6 +60,11 @@
         deleteBtn.disabled = state.selected.size === 0;
       }
 
+      const toolbar = document.getElementById(options.toolbarId);
+      if (toolbar) {
+        toolbar.hidden = !manager.canManage;
+      }
+
       const bar = document.getElementById(options.barId);
       if (bar) {
         bar.hidden = !state.enabled || !manager.canManage;
@@ -67,9 +72,9 @@
 
       const toggleBtn = document.getElementById(options.toggleBtnId);
       if (toggleBtn) {
-        toggleBtn.hidden = !manager.canManage;
         toggleBtn.textContent = state.enabled ? '退出批量' : '批量管理';
         toggleBtn.setAttribute('aria-pressed', state.enabled ? 'true' : 'false');
+        toggleBtn.classList.toggle('is-active', state.enabled);
       }
 
       getShell()?.classList.toggle('is-batch-mode', state.enabled);

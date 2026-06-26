@@ -36,6 +36,7 @@ const batchManager = window.listBatchUi?.createBatchManager({
   shellSelector: ".ingredients-shell",
   itemUnit: "种",
   barId: "ingredientsBatchBar",
+  toolbarId: "ingredientsBatchToolbar",
   toggleBtnId: "ingredientsBatchToggleBtn",
   selectAllId: "ingredientsSelectAll",
   countId: "ingredientsBatchCount",
@@ -141,11 +142,13 @@ function renderIngredientRow(ingredient) {
 
   return `
     <li class="ingredient-row" data-batch-item data-batch-id="${escapeAttr(ingredient.id)}">
-      ${checkbox}
-      <a class="ingredient-row-main" href="./ingredient.html?id=${encodeURIComponent(ingredient.id)}">
-        <span class="ingredient-row-name">${escapeHtml(ingredient.name)}</span>
-        <span class="ingredient-row-aliases">别名：${escapeHtml(aliasText)}</span>
-      </a>
+      <div class="ingredient-row-leading">
+        ${checkbox}
+        <a class="ingredient-row-main" href="./ingredient.html?id=${encodeURIComponent(ingredient.id)}">
+          <span class="ingredient-row-name">${escapeHtml(ingredient.name)}</span>
+          <span class="ingredient-row-aliases">别名：${escapeHtml(aliasText)}</span>
+        </a>
+      </div>
       <span class="ingredient-row-meta">${escapeHtml(caloriesText)}</span>
     </li>
   `;
@@ -299,15 +302,18 @@ searchInput.addEventListener("input", () => {
 });
 
 async function init() {
-  if (api?.getSessionStatus) {
+  if (api?.canBatchManage) {
+    state.canManage = await api.canBatchManage();
+  } else if (api?.getSessionStatus) {
     const session = await api.getSessionStatus();
-    state.canManage = api.canEdit() && (!api.isRemoteConfigured() || session.isAdmin);
+    state.canManage = Boolean(session.hasToken && session.isAdmin);
   } else {
-    state.canManage = api?.canEdit?.() || false;
+    state.canManage = false;
   }
 
   if (batchManager) {
     batchManager.canManage = state.canManage;
+    if (!state.canManage) batchManager.setEnabled(false);
     batchManager.bind();
   }
   bindBatchModal();

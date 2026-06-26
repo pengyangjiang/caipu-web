@@ -26,6 +26,7 @@ const batchManager = window.listBatchUi?.createBatchManager({
   shellSelector: ".recipes-shell",
   itemUnit: "道菜",
   barId: "recipesBatchBar",
+  toolbarId: "recipesBatchToolbar",
   toggleBtnId: "recipesBatchToggleBtn",
   selectAllId: "recipesSelectAll",
   countId: "recipesBatchCount",
@@ -279,15 +280,18 @@ searchInput.addEventListener("input", () => {
 });
 
 async function init() {
-  if (api?.getSessionStatus) {
+  if (api?.canBatchManage) {
+    state.canManage = await api.canBatchManage();
+  } else if (api?.getSessionStatus) {
     const session = await api.getSessionStatus();
-    state.canManage = api.canEdit() && (!api.isRemoteConfigured() || session.isAdmin);
+    state.canManage = Boolean(session.hasToken && session.isAdmin);
   } else {
-    state.canManage = api?.canEdit?.() || false;
+    state.canManage = false;
   }
 
   if (batchManager) {
     batchManager.canManage = state.canManage;
+    if (!state.canManage) batchManager.setEnabled(false);
     batchManager.bind();
   }
   bindBatchModal();

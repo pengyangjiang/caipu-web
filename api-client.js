@@ -872,6 +872,16 @@
     return isAdminMode();
   }
 
+  async function canBatchManage() {
+    const session = await getSessionStatus();
+    if (!session.hasToken) return false;
+    if (hasRemote) {
+      if (!session.checkedRemote) return false;
+      return Boolean(session.isAdmin);
+    }
+    return Boolean(session.isAdmin);
+  }
+
   window.contentApi = {
     loadContent,
     saveContent,
@@ -898,5 +908,6 @@
     clearAdminSession,
     isAdminMode,
     canEdit,
+    canBatchManage,
   };
 })();

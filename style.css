@@ -2692,6 +2692,14 @@ input {
   border-bottom: 1px solid var(--line);
 }
 
+.ingredient-row-leading {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+  flex: 1;
+}
+
 .ingredient-row.is-batch-selected {
   background: #fff8ed;
 }
@@ -2712,6 +2720,7 @@ input {
   display: grid;
   gap: 4px;
   min-width: 0;
+  flex: 1;
   color: inherit;
   text-decoration: none;
 }
@@ -2739,22 +2748,64 @@ input {
   font-size: 13px;
 }
 
-.list-batch-toolbar {
+.list-toolbar-row {
   display: flex;
-  flex-wrap: wrap;
   align-items: center;
+  justify-content: space-between;
   gap: 12px;
+  flex-wrap: wrap;
+}
+
+.list-batch-toolbar {
+  flex-shrink: 0;
+}
+
+.list-batch-toolbar[hidden] {
+  display: none !important;
+}
+
+.list-batch-toggle {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 40px;
+  padding: 0 16px;
+  border: 1px solid rgba(217, 119, 6, 0.28);
+  border-radius: 999px;
+  background: #fff;
+  color: var(--accent);
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.15s ease, border-color 0.15s ease, color 0.15s ease;
+}
+
+.list-batch-toggle:hover {
+  background: #fff8ed;
+  border-color: rgba(217, 119, 6, 0.45);
+}
+
+.list-batch-toggle.is-active {
+  background: #fff8ed;
+  border-color: rgba(217, 119, 6, 0.5);
+  color: #b45309;
 }
 
 .list-batch-bar {
   display: flex;
-  flex-wrap: wrap;
   align-items: center;
+  justify-content: space-between;
   gap: 12px;
-  padding: 10px 12px;
-  border: 1px solid rgba(217, 119, 6, 0.22);
-  border-radius: 14px;
-  background: #fff8ed;
+  flex-wrap: wrap;
+  padding: 10px 14px;
+  border: 1px solid rgba(217, 119, 6, 0.18);
+  border-radius: 16px;
+  background: linear-gradient(180deg, #fffdf8 0%, #fff8ed 100%);
+  box-shadow: 0 8px 24px rgba(217, 119, 6, 0.08);
+}
+
+.list-batch-bar[hidden] {
+  display: none !important;
 }
 
 .list-batch-select-all {
@@ -2766,9 +2817,46 @@ input {
   cursor: pointer;
 }
 
+.list-batch-select-all input {
+  width: 16px;
+  height: 16px;
+  accent-color: var(--accent);
+}
+
 .list-batch-count {
+  margin-left: auto;
+  padding: 4px 10px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.82);
   color: var(--muted);
   font-size: 13px;
+  white-space: nowrap;
+}
+
+.list-batch-delete {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 36px;
+  padding: 0 14px;
+  border: 1px solid rgba(220, 38, 38, 0.28);
+  border-radius: 999px;
+  background: #fff;
+  color: #dc2626;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.15s ease, border-color 0.15s ease;
+}
+
+.list-batch-delete:hover:not(:disabled) {
+  background: #fee2e2;
+  border-color: rgba(220, 38, 38, 0.45);
+}
+
+.list-batch-delete:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
 }
 
 .list-batch-check {
@@ -2790,8 +2878,16 @@ input {
 .ingredient-row .list-batch-check {
   position: static;
   flex-shrink: 0;
+  width: auto;
+  height: auto;
   box-shadow: none;
   background: transparent;
+}
+
+.ingredient-row .list-batch-check input {
+  width: 16px;
+  height: 16px;
+  accent-color: var(--accent);
 }
 
 .is-batch-mode .list-batch-check {

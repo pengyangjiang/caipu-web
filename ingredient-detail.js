@@ -391,11 +391,13 @@ function renderIngredientPage(ingredient) {
 (async function init() {
   bindDeleteIngredientModal();
 
-  if (contentApi?.getSessionStatus) {
+  if (contentApi?.canBatchManage) {
+    canManage = await contentApi.canBatchManage();
+  } else if (contentApi?.getSessionStatus) {
     const session = await contentApi.getSessionStatus();
-    canManage = contentApi.canEdit() && (!contentApi.isRemoteConfigured() || session.isAdmin);
+    canManage = Boolean(session.hasToken && session.isAdmin);
   } else {
-    canManage = contentApi?.canEdit?.() || false;
+    canManage = false;
   }
 
   if (contentApi?.listRecipes && catalog) {
