@@ -31,6 +31,17 @@
               autocomplete="off"
             />
           </label>
+          <div class="list-batch-toolbar">
+            <button class="action-link" type="button" id="ingredientsBatchToggleBtn" hidden>批量管理</button>
+            <div class="list-batch-bar" id="ingredientsBatchBar" hidden>
+              <label class="list-batch-select-all">
+                <input type="checkbox" id="ingredientsSelectAll" />
+                <span>全选当前列表</span>
+              </label>
+              <span class="list-batch-count" id="ingredientsBatchCount">已选 0 种</span>
+              <button class="action-link toolbar-danger" type="button" id="ingredientsBatchDeleteBtn" disabled>删除所选</button>
+            </div>
+          </div>
           <div class="category-row" id="ingredientsCategoryChips"></div>
           <p class="ingredients-meta" id="ingredientsMeta">正在加载食材...</p>
         </div>
@@ -39,6 +50,21 @@
       </section>
     </main>
 
+    <div class="confirm-modal" id="batchDeleteModal" hidden>
+      <div class="confirm-modal-backdrop" data-close-batch-modal></div>
+      <div class="confirm-modal-dialog" role="dialog" aria-modal="true" aria-labelledby="batchDeleteTitle">
+        <div class="confirm-modal-icon" aria-hidden="true">!</div>
+        <p class="confirm-modal-eyebrow">危险操作</p>
+        <h2 class="confirm-modal-title" id="batchDeleteTitle">确认批量删除？</h2>
+        <p class="confirm-modal-desc" id="batchDeleteDesc">删除后无法恢复。</p>
+        <p class="confirm-modal-note" id="batchDeleteHint">此操作需要管理员权限。</p>
+        <div class="confirm-modal-actions">
+          <button class="action-link confirm-modal-cancel" type="button" data-close-batch-modal>取消</button>
+          <button class="confirm-modal-danger" type="button" id="confirmBatchDeleteBtn">确认删除</button>
+        </div>
+      </div>
+    </div>
+
     <script src="./data.js"></script>
     <script src="./ingredient-details.js"></script>
     <script src="./shared/ingredient-sync.js"></script>
@@ -46,6 +72,8 @@
     <script src="./config.js"></script>
     <script src="./api-client.js"></script>
     <script src="./shared/site-nav.js"></script>
+    <script src="./shared/list-batch-ui.js"></script>
+    <script src="./ui-toast.js"></script>
     <script src="./ingredients.js"></script>
   </body>
 </html>

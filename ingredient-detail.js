@@ -12,7 +12,14 @@ const ingredientTips = document.getElementById("ingredientTips");
 const ingredientRecipes = document.getElementById("ingredientRecipes");
 const ingredientBreadcrumb = document.getElementById("ingredientBreadcrumb");
 const detailToolbar = document.getElementById("detailToolbar");
+const deleteIngredientModal = document.getElementById("deleteIngredientModal");
+const deleteIngredientName = document.getElementById("deleteIngredientName");
+const deleteIngredientHint = document.getElementById("deleteIngredientHint");
+const confirmDeleteIngredientBtn = document.getElementById("confirmDeleteIngredientBtn");
 const SHOPPING_LIST_KEY = "recipe-shopping-list";
+
+let currentIngredient = null;
+let canManage = false;
 
 function renderEmpty(message) {
   return `<div class="empty-state">${message}</div>`;
@@ -151,7 +158,7 @@ function addIngredientToShoppingList(ingredient) {
 function renderPageToolbar(ingredient) {
   if (!detailToolbar) return;
 
-  const editLink = contentApi.canEdit() ? contentApi.getEditLink("ingredient", ingredient.id) : "";
+  const editLink = canManage ? contentApi.getEditLink("ingredient", ingredient.id) : "";
 
   detailToolbar.innerHTML = `
     <div class="page-toolbar-group">
@@ -159,8 +166,69 @@ function renderPageToolbar(ingredient) {
     </div>
     <div class="page-toolbar-group">
       ${editLink ? `<a class="action-link" href="${editLink}">编辑</a>` : ""}
+      ${canManage ? `<button class="action-link toolbar-danger" type="button" id="deleteIngredientBtn">删除食材</button>` : ""}
     </div>
   `;
+
+  const deleteButton = detailToolbar.querySelector("#deleteIngredientBtn");
+  if (deleteButton) {
+    deleteButton.addEventListener("click", () => openDeleteIngredientModal(ingredient));
+  }
+}
+
+function openDeleteIngredientModal(ingredient) {
+  if (!deleteIngredientModal || !ingredient) return;
+  currentIngredient = ingredient;
+  if (deleteIngredientName) deleteIngredientName.textContent = ingredient.name;
+  if (deleteIngredientHint) {
+    deleteIngredientHint.textContent = contentApi.isRemoteConfigured()
+      ? "此操作需要管理员权限，并会同步到线上数据。"
+      : "将从本机草稿中移除，刷新种子数据后可能再次出现。";
+  }
+  deleteIngredientModal.hidden = false;
+  document.body.style.overflow = "hidden";
+  confirmDeleteIngredientBtn?.focus();
+}
+
+function closeDeleteIngredientModal() {
+  if (!deleteIngredientModal) return;
+  deleteIngredientModal.hidden = true;
+  document.body.style.overflow = "";
+}
+
+async function confirmDeleteIngredient() {
+  if (!currentIngredient || !contentApi.deleteContent || !confirmDeleteIngredientBtn) return;
+
+  confirmDeleteIngredientBtn.disabled = true;
+  confirmDeleteIngredientBtn.textContent = "正在删除...";
+
+  try {
+    await contentApi.deleteContent("ingredient", currentIngredient.id);
+    closeDeleteIngredientModal();
+    window.uiToast?.show(`已删除「${currentIngredient.name}」`, { type: "success", duration: 1200 });
+    window.setTimeout(() => {
+      window.location.href = "./ingredients.html";
+    }, 450);
+  } catch (error) {
+    confirmDeleteIngredientBtn.disabled = false;
+    confirmDeleteIngredientBtn.textContent = "确认删除";
+    window.uiToast?.show(error?.message || "删除失败", { type: "error", duration: 2000 });
+  }
+}
+
+function bindDeleteIngredientModal() {
+  if (!deleteIngredientModal || deleteIngredientModal.dataset.bound === "1") return;
+  deleteIngredientModal.dataset.bound = "1";
+
+  deleteIngredientModal.querySelectorAll("[data-close-delete-ingredient-modal]").forEach((node) => {
+    node.addEventListener("click", closeDeleteIngredientModal);
+  });
+  confirmDeleteIngredientBtn?.addEventListener("click", confirmDeleteIngredient);
+  window.addEventListener("keydown", (event) => {
+    if (event.key === "Escape" && deleteIngredientModal && !deleteIngredientModal.hidden) {
+      closeDeleteIngredientModal();
+    }
+  });
 }
 
 function renderIngredientPage(ingredient) {
@@ -321,6 +389,15 @@ function renderIngredientPage(ingredient) {
 }
 
 (async function init() {
+  bindDeleteIngredientModal();
+
+  if (contentApi?.getSessionStatus) {
+    const session = await contentApi.getSessionStatus();
+    canManage = contentApi.canEdit() && (!contentApi.isRemoteConfigured() || session.isAdmin);
+  } else {
+    canManage = contentApi?.canEdit?.() || false;
+  }
+
   if (contentApi?.listRecipes && catalog) {
     try {
       const remoteRecipes = await contentApi.listRecipes();

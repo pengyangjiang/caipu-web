@@ -24,6 +24,23 @@
       <section class="panel ingredient-section" id="ingredientRecipes"></section>
     </main>
 
+    <div class="confirm-modal" id="deleteIngredientModal" hidden>
+      <div class="confirm-modal-backdrop" data-close-delete-ingredient-modal></div>
+      <div class="confirm-modal-dialog" role="dialog" aria-modal="true" aria-labelledby="deleteIngredientTitle">
+        <div class="confirm-modal-icon" aria-hidden="true">!</div>
+        <p class="confirm-modal-eyebrow">危险操作</p>
+        <h2 class="confirm-modal-title" id="deleteIngredientTitle">确认删除这个食材？</h2>
+        <p class="confirm-modal-desc">
+          即将删除「<strong id="deleteIngredientName">当前食材</strong>」。删除后无法恢复，相关详情页将不再显示。
+        </p>
+        <p class="confirm-modal-note" id="deleteIngredientHint">此操作需要管理员权限。</p>
+        <div class="confirm-modal-actions">
+          <button class="action-link confirm-modal-cancel" type="button" data-close-delete-ingredient-modal>取消</button>
+          <button class="confirm-modal-danger" type="button" id="confirmDeleteIngredientBtn">确认删除</button>
+        </div>
+      </div>
+    </div>
+
     <script src="./data.js"></script>
     <script src="./ingredient-details.js"></script>
     <script src="./shared/ingredient-sync.js"></script>

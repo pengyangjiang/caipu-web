@@ -67,9 +67,6 @@ function normalizeRecipe(record) {
     note: '',
     ...(normalized.calories || {}),
   };
-  if (normalized.nutritionProfile?.source === 'manual') {
-    return normalized;
-  }
   return ensureNutritionProfile(normalized, nutritionOptions) || normalized;
 }
 
@@ -310,6 +307,13 @@ function createStore() {
     },
     syncIngredientCatalog(catalogItems) {
       return syncIngredientCatalog(catalogItems);
+    },
+    deleteIngredient(id) {
+      const normalizedId = String(id || '').trim();
+      assertRecord(ingredients[normalizedId], 'Ingredient');
+      delete ingredients[normalizedId];
+      persist();
+      return { id: normalizedId, deleted: true };
     },
     deleteRecipe(id) {
       const normalizedId = String(id || '').trim();

@@ -12,6 +12,7 @@
     ingredient: 'ingredient-content-drafts',
   };
   const deletedRecipesKey = 'recipe-content-deleted';
+  const deletedIngredientsKey = 'ingredient-content-deleted';
 
   if (!model) {
     throw new Error('contentModel 未加载，请先在 HTML 中引入 content-model.js');
@@ -48,6 +49,50 @@
 
   function writeDrafts(type, drafts) {
     localStorage.setItem(getStorageKey(type), JSON.stringify(drafts));
+  }
+
+  function readDeletedIngredientIds() {
+    try {
+      return new Set(JSON.parse(localStorage.getItem(deletedIngredientsKey) || '[]'));
+    } catch {
+      return new Set();
+    }
+  }
+
+  function markIngredientDeleted(id) {
+    const normalizedId = String(id || '').trim();
+    if (!normalizedId) return;
+    const deleted = readDeletedIngredientIds();
+    deleted.add(normalizedId);
+    localStorage.setItem(deletedIngredientsKey, JSON.stringify([...deleted]));
+  }
+
+  function isIngredientDeleted(id) {
+    return readDeletedIngredientIds().has(String(id || '').trim());
+  }
+
+  function removeIngredientLocally(id) {
+    const normalizedId = String(id || '').trim();
+    if (!normalizedId) return;
+
+    markIngredientDeleted(normalizedId);
+
+    const drafts = readDrafts('ingredient');
+    if (drafts[normalizedId]) {
+      delete drafts[normalizedId];
+      writeDrafts('ingredient', drafts);
+    }
+
+    const sourceMap = getSourceMap('ingredient');
+    if (sourceMap[normalizedId]) {
+      delete sourceMap[normalizedId];
+    }
+
+    if (window.recipeCatalog?.ingredients) {
+      window.recipeCatalog.ingredients = window.recipeCatalog.ingredients.filter(
+        (item) => item.id !== normalizedId,
+      );
+    }
   }
 
   function readDeletedRecipeIds() {
@@ -348,6 +393,9 @@
     if (type === 'recipe' && isRecipeDeleted(id)) {
       return null;
     }
+    if (type === 'ingredient' && isIngredientDeleted(id)) {
+      return null;
+    }
 
     const draft = readDrafts(type)[id] || null;
     const seedRecord = getSourceMap(type)[id] || null;
@@ -517,45 +565,102 @@
   }
 
   async function deleteContent(type, id) {
-    if (type !== 'recipe') {
-      throw new Error('当前仅支持删除菜谱');
-    }
-
     const normalizedId = String(id || '').trim();
     if (!normalizedId) {
-      throw new Error('缺少菜谱 ID');
+      throw new Error(type === 'ingredient' ? '缺少食材 ID' : '缺少菜谱 ID');
     }
 
     lastSaveTarget = 'local';
     lastSaveFailure = '';
 
-    if (hasRemote) {
-      try {
-        const data = unwrapResponse(await request(`/api/recipes/${encodeURIComponent(normalizedId)}`, {
-          method: 'DELETE',
-        }));
-        removeRecipeLocally(normalizedId);
-        lastSaveTarget = 'remote';
-        return data || { id: normalizedId, deleted: true };
-      } catch (error) {
-        if (error.code === 'NOT_FOUND') {
+    if (type === 'recipe') {
+      if (hasRemote) {
+        try {
+          const data = unwrapResponse(await request(`/api/recipes/${encodeURIComponent(normalizedId)}`, {
+            method: 'DELETE',
+          }));
           removeRecipeLocally(normalizedId);
-          return { id: normalizedId, deleted: true };
+          lastSaveTarget = 'remote';
+          return data || { id: normalizedId, deleted: true };
+        } catch (error) {
+          if (error.code === 'NOT_FOUND') {
+            removeRecipeLocally(normalizedId);
+            return { id: normalizedId, deleted: true };
+          }
+          if (error.code === 'KV_NOT_CONFIGURED') {
+            lastSaveFailure = '服务器未配置 CONTENT_KV，无法在线删除';
+          } else if (error.status === 403) {
+            lastSaveFailure = '管理员权限失效，请重新登录';
+            throw error;
+          } else {
+            lastSaveFailure = error.message || '服务器删除失败';
+            throw error;
+          }
         }
-        if (error.code === 'KV_NOT_CONFIGURED') {
-          lastSaveFailure = '服务器未配置 CONTENT_KV，无法在线删除';
-        } else if (error.status === 403) {
-          lastSaveFailure = '管理员权限失效，请重新登录';
-          throw error;
-        } else {
-          lastSaveFailure = error.message || '服务器删除失败';
-          throw error;
+      }
+
+      removeRecipeLocally(normalizedId);
+      return { id: normalizedId, deleted: true };
+    }
+
+    if (type === 'ingredient') {
+      if (hasRemote) {
+        try {
+          const data = unwrapResponse(await request(`/api/ingredients/${encodeURIComponent(normalizedId)}`, {
+            method: 'DELETE',
+          }));
+          removeIngredientLocally(normalizedId);
+          lastSaveTarget = 'remote';
+          return data || { id: normalizedId, deleted: true };
+        } catch (error) {
+          if (error.code === 'NOT_FOUND') {
+            removeIngredientLocally(normalizedId);
+            return { id: normalizedId, deleted: true };
+          }
+          if (error.code === 'KV_NOT_CONFIGURED') {
+            lastSaveFailure = '服务器未配置 CONTENT_KV，无法在线删除';
+          } else if (error.status === 403) {
+            lastSaveFailure = '管理员权限失效，请重新登录';
+            throw error;
+          } else {
+            lastSaveFailure = error.message || '服务器删除失败';
+            throw error;
+          }
         }
+      }
+
+      removeIngredientLocally(normalizedId);
+      return { id: normalizedId, deleted: true };
+    }
+
+    throw new Error('不支持的删除类型');
+  }
+
+  async function deleteManyContent(type, ids) {
+    const uniqueIds = [...new Set((ids || []).map((item) => String(item || '').trim()).filter(Boolean))];
+    if (!uniqueIds.length) {
+      return { deleted: [], failed: [] };
+    }
+
+    const deleted = [];
+    const failed = [];
+
+    for (const id of uniqueIds) {
+      try {
+        await deleteContent(type, id);
+        deleted.push(id);
+      } catch (error) {
+        failed.push({ id, message: error?.message || '删除失败' });
       }
     }
 
-    removeRecipeLocally(normalizedId);
-    return { id: normalizedId, deleted: true };
+    if (!deleted.length && failed.length) {
+      const batchError = new Error(failed[0].message || '批量删除失败');
+      batchError.failed = failed;
+      throw batchError;
+    }
+
+    return { deleted, failed };
   }
 
   async function startRecipeGeneration(name, id) {
@@ -602,7 +707,7 @@
       try {
         const data = unwrapResponse(await request('/api/ingredients'));
         if (Array.isArray(data)) {
-          return data;
+          return data.filter((item) => item?.id && !isIngredientDeleted(item.id));
         }
       } catch {
         // fall back to local data
@@ -610,9 +715,10 @@
     }
 
     const drafts = readDrafts('ingredient');
+    const deleted = readDeletedIngredientIds();
     const merged = { ...getSourceMap('ingredient'), ...drafts };
     return Object.values(merged)
-      .filter((item) => item?.id)
+      .filter((item) => item?.id && !deleted.has(item.id))
       .map((item) => pickIngredientListItem(item));
   }
 
@@ -645,23 +751,24 @@
   function mergeCatalogIngredients(catalog, remoteList) {
     if (!catalog) return catalog;
 
+    const deleted = readDeletedIngredientIds();
     const byId = new Map();
     for (const item of catalog.ingredients || []) {
-      if (item?.id) {
+      if (item?.id && !deleted.has(item.id)) {
         byId.set(item.id, { ...item });
       }
     }
 
     const details = getSourceMap('ingredient');
     for (const item of Object.values(details)) {
-      if (!item?.id) continue;
+      if (!item?.id || deleted.has(item.id)) continue;
       const listItem = pickIngredientListItem(item);
       byId.set(item.id, mergeIngredientSnapshot(byId.get(item.id), listItem));
     }
 
     if (Array.isArray(remoteList)) {
       for (const item of remoteList) {
-        if (!item?.id) continue;
+        if (!item?.id || deleted.has(item.id)) continue;
         byId.set(item.id, mergeIngredientSnapshot(byId.get(item.id), item));
         details[item.id] = mergeIngredientSnapshot(details[item.id], item);
       }
@@ -770,6 +877,7 @@
     saveContent,
     createContent,
     deleteContent,
+    deleteManyContent,
     startRecipeGeneration,
     pollRecipeGeneration,
     listRecipes,

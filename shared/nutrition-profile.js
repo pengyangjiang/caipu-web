@@ -6,13 +6,46 @@ const DAILY_REFERENCE = {
   fiber: 25,
 };
 
-const PROFILE_VERSION = 2;
+const PROFILE_VERSION = 3;
 
 const GRADE_RANK = {
   绿灯: 0,
   黄灯: 1,
   红灯: 2,
 };
+
+const COOKING_METHOD_RULES = [
+  { method: 'deep_fry', pattern: /炸|油炸|deep\s*fry/i },
+  { method: 'pan_fry', pattern: /香煎|煎(?!饼)|pan\s*fry/i },
+  { method: 'stir_fry', pattern: /炒|爆炒|stir\s*fry/i },
+  { method: 'boil', pattern: /煮|焯|炖|boil/i },
+  { method: 'steam', pattern: /蒸|steam/i },
+  { method: 'roast', pattern: /烤|烘|roast/i },
+];
+
+const YIELD_BY_METHOD = {
+  deep_fry: 0.62,
+  pan_fry: 0.78,
+  stir_fry: 0.88,
+  boil: 0.92,
+  steam: 0.94,
+  roast: 0.72,
+  default: 1.0,
+};
+
+const INGREDIENT_YIELD_OVERRIDE = {
+  土豆: { deep_fry: 0.60 },
+  马铃薯: { deep_fry: 0.60 },
+  红薯: { deep_fry: 0.65 },
+};
+
+/** 炸制：按成品固态吸油比例估算（大锅油仅少量进入成品，取 solid 与 usage 的较大值） */
+const DEEP_FRY_OIL_ABSORPTION = {
+  solidRate: 0.18,
+  usageRate: 0.12,
+};
+
+const OIL_CALORIES_PER_G = 9;
 
 function round1(value) {
   return Number(Number(value || 0).toFixed(1));
@@ -29,6 +62,76 @@ function parseNutrientNumber(value) {
 
 function maxGrade(current, next) {
   return GRADE_RANK[next] > GRADE_RANK[current] ? next : current;
+}
+
+function detectCookingMethod(recipe) {
+  const override = recipe?.cookingProfile?.method;
+  if (override && YIELD_BY_METHOD[override] !== undefined) {
+    return override;
+  }
+
+  const text = [
+    ...(recipe.tags || []),
+    ...(recipe.statusTags || []),
+    ...(recipe.steps || []).map((step) => `${step.title || ''} ${step.content || ''}`),
+    ...(recipe.ingredients || []).map((group) => group.group || ''),
+  ].join(' ');
+
+  for (const rule of COOKING_METHOD_RULES) {
+    if (rule.pattern.test(text)) return rule.method;
+  }
+  return 'default';
+}
+
+function getYieldFactor(method, ingredientName, recipe) {
+  const name = String(ingredientName || '').trim();
+  for (const [key, factors] of Object.entries(INGREDIENT_YIELD_OVERRIDE)) {
+    if (name.includes(key) && factors[method] != null) {
+      return factors[method];
+    }
+  }
+
+  const profileFactor = Number(recipe?.cookingProfile?.yieldFactor);
+  if (Number.isFinite(profileFactor) && profileFactor > 0 && profileFactor <= 1) {
+    return profileFactor;
+  }
+
+  return YIELD_BY_METHOD[method] ?? YIELD_BY_METHOD.default;
+}
+
+function isOilIngredient(name) {
+  const text = String(name || '').trim();
+  if (/酱油|蚝油|料酒|豆瓣|沙司|麻油$/.test(text)) return false;
+  return /(?:油|黄油|猪油|酥油|margarine)/i.test(text);
+}
+
+function classifyIngredient(item, groupName, cookingMethod) {
+  const name = String(item.name || '').trim();
+  const group = String(groupName || '').trim();
+
+  if (isExcludedBulkLiquid(name, item.amount)) return 'excluded';
+
+  if (isOilIngredient(name)) {
+    if (/炸|deep/i.test(group) || cookingMethod === 'deep_fry') {
+      return 'pot_oil';
+    }
+    if (
+      cookingMethod === 'stir_fry'
+      || cookingMethod === 'pan_fry'
+      || /炒|煎|料|辅|调味|制作|烹/i.test(group)
+    ) {
+      return 'dish_oil';
+    }
+    const grams = parseAmountToGrams(item.amount);
+    if (grams >= 120) return 'pot_oil';
+    return 'dish_oil';
+  }
+
+  if (/^(?:盐|糖|胡椒|花椒|味精|鸡精)$/.test(name) || /(?:酱|粉|汁|露|料)$/.test(name)) {
+    return 'seasoning';
+  }
+
+  return 'solid';
 }
 
 function createIngredientLookup(options = {}) {
@@ -114,6 +217,126 @@ function parseAmountToGrams(amount, options = {}) {
   return 0;
 }
 
+function addNutrientsFromLookup(grams, item, lookup, totals) {
+  if (grams <= 0) return 0;
+
+  const detail = lookup.get(normalizeIngredientName(item.name));
+  if (!detail) return 0;
+
+  const factor = grams / 100;
+  totals.calories += Number(detail.caloriesPer100g || 0) * factor;
+  totals.protein += Number(detail.nutritionPer100g?.protein || 0) * factor;
+  totals.fat += Number(detail.nutritionPer100g?.fat || 0) * factor;
+  totals.carbs += Number(detail.nutritionPer100g?.carbs || 0) * factor;
+  totals.fiber += Number(detail.nutritionPer100g?.fiber || 0) * factor;
+  return grams;
+}
+
+function addNutrientsFromOilGrams(grams, lookup, itemName, totals) {
+  if (grams <= 0) return;
+
+  const detail = lookup.get(normalizeIngredientName(itemName));
+  if (detail) {
+    addNutrientsFromLookup(grams, { name: itemName }, lookup, totals);
+    return;
+  }
+
+  totals.fat += grams;
+  totals.calories += grams * OIL_CALORIES_PER_G;
+}
+
+function estimateDeepFryOilAbsorptionG(finishedSolidG, potOilUsedG, recipe) {
+  const solidRate = Number(recipe?.cookingProfile?.oilSolidRate)
+    || DEEP_FRY_OIL_ABSORPTION.solidRate;
+  const usageRate = Number(recipe?.cookingProfile?.oilUsageRate)
+    || DEEP_FRY_OIL_ABSORPTION.usageRate;
+
+  const bySolid = finishedSolidG * solidRate;
+  const byUsage = potOilUsedG * usageRate;
+  return round1(Math.max(bySolid, byUsage));
+}
+
+function analyzeCookingComposition(recipe, lookup) {
+  const method = detectCookingMethod(recipe);
+  const totals = { calories: 0, protein: 0, fat: 0, carbs: 0, fiber: 0 };
+
+  let rawInputWeightG = 0;
+  let rawSolidWeightG = 0;
+  let finishedSolidG = 0;
+  let seasoningG = 0;
+  let potOilUsedG = 0;
+  let dishOilG = 0;
+  let matchedWeight = 0;
+
+  for (const group of recipe.ingredients || []) {
+    for (const item of group.items || []) {
+      const role = classifyIngredient(item, group.group, method);
+      const grams = parseAmountToGrams(item.amount);
+      if (grams <= 0 || role === 'excluded') continue;
+
+      rawInputWeightG += grams;
+
+      if (role === 'pot_oil') {
+        potOilUsedG += grams;
+        continue;
+      }
+
+      if (role === 'dish_oil') {
+        dishOilG += grams;
+        matchedWeight += addNutrientsFromLookup(grams, item, lookup, totals) || 0;
+        if (!lookup.get(normalizeIngredientName(item.name))) {
+          addNutrientsFromOilGrams(grams, lookup, item.name, totals);
+          matchedWeight += grams;
+        }
+        continue;
+      }
+
+      if (role === 'seasoning') {
+        seasoningG += grams;
+        matchedWeight += addNutrientsFromLookup(grams, item, lookup, totals) || 0;
+        continue;
+      }
+
+      rawSolidWeightG += grams;
+      const yieldFactor = getYieldFactor(method, item.name, recipe);
+      const effectiveG = grams * yieldFactor;
+      finishedSolidG += effectiveG;
+      matchedWeight += addNutrientsFromLookup(effectiveG, item, lookup, totals) || 0;
+    }
+  }
+
+  let oilAbsorbedG = 0;
+  if (method === 'deep_fry' || potOilUsedG > 0) {
+    oilAbsorbedG = estimateDeepFryOilAbsorptionG(finishedSolidG, potOilUsedG, recipe);
+    totals.fat += oilAbsorbedG;
+    totals.calories += oilAbsorbedG * OIL_CALORIES_PER_G;
+    matchedWeight += oilAbsorbedG;
+  }
+
+  const finishedWeightG = Math.round(finishedSolidG + seasoningG + dishOilG + oilAbsorbedG);
+
+  return {
+    method,
+    rawInputWeightG: round1(rawInputWeightG),
+    rawSolidWeightG: round1(rawSolidWeightG),
+    finishedSolidG: round1(finishedSolidG),
+    seasoningG: round1(seasoningG),
+    potOilUsedG: round1(potOilUsedG),
+    dishOilG: round1(dishOilG),
+    oilAbsorbedG,
+    finishedWeightG,
+    matchedWeight: round1(matchedWeight),
+    solidWeight: round1(rawSolidWeightG + seasoningG + dishOilG),
+    nutrients: {
+      calories: round1(totals.calories),
+      protein: round1(totals.protein),
+      fat: round1(totals.fat),
+      carbs: round1(totals.carbs),
+      fiber: round1(totals.fiber),
+    },
+  };
+}
+
 function getNutrientValues(recipe) {
   const summaryMap = new Map((recipe.summary || []).map((item) => [item.label, item.value]));
   const nutritionMap = {};
@@ -136,47 +359,18 @@ function getNutrientValues(recipe) {
 function estimateNutrientsFromIngredients(recipe, lookup) {
   if (!lookup || lookup.size === 0) return null;
 
-  let matchedWeight = 0;
-  let solidWeight = 0;
-  let calories = 0;
-  let protein = 0;
-  let fat = 0;
-  let carbs = 0;
-  let fiber = 0;
-
-  for (const group of recipe.ingredients || []) {
-    for (const item of group.items || []) {
-      if (isExcludedBulkLiquid(item.name, item.amount)) continue;
-
-      const grams = parseAmountToGrams(item.amount);
-      if (grams <= 0) continue;
-      solidWeight += grams;
-
-      const detail = lookup.get(normalizeIngredientName(item.name));
-      if (!detail) continue;
-
-      matchedWeight += grams;
-      const factor = grams / 100;
-      calories += Number(detail.caloriesPer100g || 0) * factor;
-      protein += Number(detail.nutritionPer100g?.protein || 0) * factor;
-      fat += Number(detail.nutritionPer100g?.fat || 0) * factor;
-      carbs += Number(detail.nutritionPer100g?.carbs || 0) * factor;
-      fiber += Number(detail.nutritionPer100g?.fiber || 0) * factor;
-    }
-  }
+  const composition = analyzeCookingComposition(recipe, lookup);
+  const { solidWeight, matchedWeight, nutrients } = composition;
 
   if (solidWeight < 60 || matchedWeight < solidWeight * 0.35) {
     return null;
   }
 
   return {
-    calories: round1(calories),
-    protein: round1(protein),
-    fat: round1(fat),
-    carbs: round1(carbs),
-    fiber: round1(fiber),
-    matchedWeight: round1(matchedWeight),
-    solidWeight: round1(solidWeight),
+    ...nutrients,
+    matchedWeight,
+    solidWeight,
+    composition,
   };
 }
 
@@ -192,18 +386,9 @@ function mergeNutrientValues(stated, estimated) {
   };
 }
 
-function estimateServingWeightG(recipe, calories) {
-  let solidTotal = 0;
-
-  for (const group of recipe.ingredients || []) {
-    for (const item of group.items || []) {
-      if (isExcludedBulkLiquid(item.name, item.amount)) continue;
-      solidTotal += parseAmountToGrams(item.amount);
-    }
-  }
-
-  if (solidTotal >= 80) {
-    return Math.round(solidTotal);
+function estimateServingWeightG(recipe, calories, composition) {
+  if (composition?.finishedWeightG >= 80) {
+    return composition.finishedWeightG;
   }
 
   if (calories >= 480) return 380;
@@ -299,21 +484,17 @@ function applyComputedNutrients(recipe, nutrients, estimated) {
 function buildNutritionProfile(recipe, options = {}) {
   if (!recipe || typeof recipe !== 'object') return null;
 
-  const existing = recipe.nutritionProfile;
-  if (existing?.source === 'manual') {
-    return existing;
-  }
-
   const lookup = createIngredientLookup(options);
   const stated = getNutrientValues(recipe);
   const estimated = estimateNutrientsFromIngredients(recipe, lookup);
   const nutrients = mergeNutrientValues(stated, estimated);
+  const composition = estimated?.composition || analyzeCookingComposition(recipe, lookup);
 
   if (!nutrients.calories) {
     return null;
   }
 
-  const servingWeightG = estimateServingWeightG(recipe, nutrients.calories);
+  const servingWeightG = estimateServingWeightG(recipe, nutrients.calories, composition);
   const factor = 100 / servingWeightG;
 
   const per100g = {
@@ -336,7 +517,14 @@ function buildNutritionProfile(recipe, options = {}) {
   return {
     source: 'computed',
     version: PROFILE_VERSION,
+    weightModel: 'cooked_yield_v1',
+    cookingMethod: composition.method,
     servingWeightG,
+    rawInputWeightG: composition.rawInputWeightG,
+    finishedSolidG: composition.finishedSolidG,
+    dishOilG: composition.dishOilG,
+    potOilUsedG: composition.potOilUsedG,
+    oilAbsorbedG: composition.oilAbsorbedG,
     excludesCookingLiquid: true,
     ingredientMatchWeightG: estimated?.matchedWeight || 0,
     dailyReference: { ...DAILY_REFERENCE },
@@ -353,7 +541,6 @@ function buildNutritionProfile(recipe, options = {}) {
 
 function ensureNutritionProfile(recipe, options = {}) {
   if (!recipe || typeof recipe !== 'object') return recipe;
-  if (recipe.nutritionProfile?.source === 'manual') return recipe;
 
   const lookup = createIngredientLookup(options);
   const stated = getNutrientValues(recipe);
@@ -385,31 +572,227 @@ function readNutrientValueFromDetail(detail, meta, grams) {
   return Number(detail.caloriesPer100g || 0) * factor;
 }
 
+function getDensityLabel(detail, meta, nutrientKey) {
+  if (nutrientKey === 'calories') {
+    return `${Number(detail.caloriesPer100g || 0)} kcal/100g`;
+  }
+  return `${Number(detail.nutritionPer100g?.[meta.field] || 0)}g/100g`;
+}
+
+function formatFormulaValue(value, unit) {
+  return unit === 'kcal' ? `${Number(value || 0).toFixed(1)} kcal` : `${Number(value || 0).toFixed(1)}g`;
+}
+
+function buildItemFormula({
+  name,
+  rawGrams,
+  effectiveG,
+  yieldFactor,
+  role,
+  densityLabel,
+  value,
+  unit,
+  nutrientKey,
+  composition,
+}) {
+  const result = formatFormulaValue(value, unit);
+
+  if (name === '炸制吸油') {
+    const base = `max(${composition.finishedSolidG}g×18%, ${composition.potOilUsedG}g×12%) = ${composition.oilAbsorbedG}g`;
+    if (nutrientKey === 'calories') {
+      return `${base} × 9 kcal/g = ${result}`;
+    }
+    if (nutrientKey === 'fat') {
+      return `${base} = ${result}`;
+    }
+    return `${base}（该项不计入${metaLabel(nutrientKey)}）`;
+  }
+
+  if (role === 'solid' && yieldFactor < 0.999) {
+    return `${rawGrams}g × ${yieldFactor}(出品率) × ${densityLabel} = ${result}`;
+  }
+
+  if (role === 'dish_oil') {
+    if (densityLabel) {
+      return `${effectiveG}g（烹调用油全额）× ${densityLabel} = ${result}`;
+    }
+    if (nutrientKey === 'calories') {
+      return `${effectiveG}g（烹调用油全额）× 9 kcal/g = ${result}`;
+    }
+    if (nutrientKey === 'fat') {
+      return `${effectiveG}g（烹调用油全额）= ${result}`;
+    }
+  }
+
+  if (densityLabel) {
+    return `${effectiveG}g × ${densityLabel} = ${result}`;
+  }
+
+  return `${effectiveG}g（未匹配食材库，未计入）`;
+}
+
+function metaLabel(nutrientKey) {
+  return NUTRIENT_BREAKDOWN_META[nutrientKey]?.label || '该营养素';
+}
+
+function getMergedNutrientField(nutrientKey) {
+  return {
+    calories: 'calories',
+    protein: 'protein',
+    fat: 'fat',
+    carbs: 'carbs',
+  }[nutrientKey] || nutrientKey;
+}
+
+function buildFormulaSummary(recipe, nutrientKey, meta, items, composition, options) {
+  const unit = meta.unit;
+  const field = getMergedNutrientField(nutrientKey);
+  const stated = getNutrientValues(recipe);
+  const estimatedResult = estimateNutrientsFromIngredients(recipe, createIngredientLookup(options));
+  const estimatedNutrients = estimatedResult || { [field]: 0 };
+  const merged = mergeNutrientValues(stated, estimatedNutrients);
+  const estimatedValue = round1(items.reduce((sum, item) => sum + Number(item.value || 0), 0));
+  const statedValue = round1(stated[field] || 0);
+  const finalValue = round1(merged[field] || 0);
+  const profile = recipe.nutritionProfile || buildNutritionProfile(recipe, options);
+
+  const lines = [];
+
+  if (items.length) {
+    const parts = items.map((item) => formatFormulaValue(item.value, unit));
+    lines.push({
+      kind: 'sum',
+      text: `食材估算合计 = ${parts.join(' + ')} = ${formatFormulaValue(estimatedValue, unit)}`,
+    });
+  } else {
+    lines.push({
+      kind: 'note',
+      text: '暂无可用食材分项，无法列出加总公式。',
+    });
+  }
+
+  if (nutrientKey === 'calories' || nutrientKey === 'fat') {
+    if (statedValue > estimatedValue && statedValue > 0) {
+      lines.push({
+        kind: 'step',
+        text: `菜谱声明 = ${formatFormulaValue(statedValue, unit)}`,
+      });
+      lines.push({
+        kind: 'result',
+        text: `最终每份 = max(食材估算, 菜谱声明) = ${formatFormulaValue(finalValue, unit)}`,
+      });
+    } else {
+      lines.push({
+        kind: 'result',
+        text: `最终每份 = ${formatFormulaValue(finalValue, unit)}`,
+      });
+    }
+  } else if (estimatedValue > 0) {
+    lines.push({
+      kind: 'result',
+      text: `最终每份 = 食材估算 = ${formatFormulaValue(finalValue, unit)}`,
+    });
+  } else if (statedValue > 0) {
+    lines.push({
+      kind: 'result',
+      text: `最终每份 = 菜谱声明 = ${formatFormulaValue(statedValue, unit)}`,
+    });
+  } else {
+    lines.push({
+      kind: 'result',
+      text: `最终每份 = ${formatFormulaValue(finalValue, unit)}`,
+    });
+  }
+
+  if (profile?.servingWeightG && nutrientKey === 'calories' && profile.per100g?.calories) {
+    lines.push({
+      kind: 'step',
+      text: `每100g = ${formatFormulaValue(finalValue, unit)} ÷ ${profile.servingWeightG}g × 100 = ${profile.per100g.calories} kcal/100g`,
+    });
+  } else if (profile?.servingWeightG && meta.nested && profile.per100g?.[meta.field] != null) {
+    lines.push({
+      kind: 'step',
+      text: `每100g ${meta.label} = ${formatFormulaValue(finalValue, unit)} ÷ ${profile.servingWeightG}g × 100 = ${profile.per100g[meta.field]}g/100g`,
+    });
+  }
+
+  if (composition?.method === 'deep_fry' && composition.oilAbsorbedG > 0) {
+    lines.push({
+      kind: 'note',
+      text: `炸制成品固态约 ${composition.finishedSolidG}g，吸油约 ${composition.oilAbsorbedG}g；大锅炸油 ${composition.potOilUsedG}g 不全额计入。`,
+    });
+  } else if (composition?.dishOilG > 0) {
+    lines.push({
+      kind: 'note',
+      text: `烹调用油 ${composition.dishOilG}g 全额计入成品重量与营养。`,
+    });
+  }
+
+  return {
+    lines,
+    estimatedValue,
+    statedValue,
+    finalValue,
+  };
+}
+
 function getIngredientNutrientBreakdown(recipe, nutrientKey, options = {}) {
   const meta = NUTRIENT_BREAKDOWN_META[nutrientKey];
   if (!meta || !recipe) return null;
 
   const lookup = createIngredientLookup(options);
+  const composition = analyzeCookingComposition(recipe, lookup);
   const contributions = new Map();
 
   for (const group of recipe.ingredients || []) {
     for (const item of group.items || []) {
-      if (isExcludedBulkLiquid(item.name, item.amount)) continue;
+      const role = classifyIngredient(item, group.group, composition.method);
+      const rawGrams = parseAmountToGrams(item.amount);
+      if (rawGrams <= 0 || role === 'excluded' || role === 'pot_oil') continue;
 
-      const grams = parseAmountToGrams(item.amount);
-      if (grams <= 0) continue;
+      let effectiveG = rawGrams;
+      let yieldFactor = 1;
+      if (role === 'solid') {
+        yieldFactor = getYieldFactor(composition.method, item.name, recipe);
+        effectiveG = rawGrams * yieldFactor;
+      }
 
       const detail = lookup.get(normalizeIngredientName(item.name));
-      if (!detail) continue;
+      let value = 0;
+      let densityLabel = '';
 
-      const value = readNutrientValueFromDetail(detail, meta, grams);
+      if (detail) {
+        densityLabel = getDensityLabel(detail, meta, nutrientKey);
+        value = readNutrientValueFromDetail(detail, meta, effectiveG);
+      } else if (role === 'dish_oil') {
+        if (nutrientKey === 'calories') {
+          value = effectiveG * OIL_CALORIES_PER_G;
+        } else if (nutrientKey === 'fat') {
+          value = effectiveG;
+        }
+      }
+
       if (value <= 0) continue;
 
       const key = normalizeIngredientName(item.name);
+      const formula = buildItemFormula({
+        name: item.name,
+        rawGrams,
+        effectiveG: round1(effectiveG),
+        yieldFactor,
+        role,
+        densityLabel,
+        value: round1(value),
+        unit: meta.unit,
+        nutrientKey,
+        composition,
+      });
+
       const existing = contributions.get(key);
       if (existing) {
-        existing.grams = round1(existing.grams + grams);
+        existing.grams = round1(existing.grams + effectiveG);
         existing.value = round1(existing.value + value);
+        existing.formula = `${existing.formula}；${formula}`;
         if (!existing.amounts.includes(item.amount)) {
           existing.amounts.push(item.amount);
         }
@@ -418,17 +801,44 @@ function getIngredientNutrientBreakdown(recipe, nutrientKey, options = {}) {
           name: item.name,
           amount: item.amount,
           amounts: [item.amount],
-          grams: round1(grams),
+          grams: round1(effectiveG),
           value: round1(value),
+          formula,
         });
       }
     }
+  }
+
+  if (composition.oilAbsorbedG > 0 && (nutrientKey === 'calories' || nutrientKey === 'fat')) {
+    const oilValue = nutrientKey === 'calories'
+      ? round1(composition.oilAbsorbedG * OIL_CALORIES_PER_G)
+      : round1(composition.oilAbsorbedG);
+    contributions.set('__absorbed_oil__', {
+      name: '炸制吸油',
+      amount: `约 ${composition.oilAbsorbedG}g`,
+      amounts: [`约 ${composition.oilAbsorbedG}g`],
+      grams: composition.oilAbsorbedG,
+      value: oilValue,
+      formula: buildItemFormula({
+        name: '炸制吸油',
+        rawGrams: composition.oilAbsorbedG,
+        effectiveG: composition.oilAbsorbedG,
+        yieldFactor: 1,
+        role: 'pot_oil',
+        densityLabel: '',
+        value: oilValue,
+        unit: meta.unit,
+        nutrientKey,
+        composition,
+      }),
+    });
   }
 
   const items = [...contributions.values()]
     .sort((a, b) => b.value - a.value);
 
   const total = round1(items.reduce((sum, item) => sum + item.value, 0));
+  const formulaSummary = buildFormulaSummary(recipe, nutrientKey, meta, items, composition, options);
   const enrichedItems = items.map((item, index) => ({
     ...item,
     amount: item.amounts.length > 1 ? item.amounts.join(' + ') : item.amount,
@@ -441,8 +851,10 @@ function getIngredientNutrientBreakdown(recipe, nutrientKey, options = {}) {
     label: meta.label,
     unit: meta.unit,
     color: meta.color,
-    total,
+    total: formulaSummary.finalValue || total,
+    breakdownTotal: total,
     items: enrichedItems,
+    formulaSummary,
     hasData: enrichedItems.length > 0 && total > 0,
   };
 }
@@ -453,6 +865,7 @@ if (typeof module !== 'undefined') {
     ensureNutritionProfile,
     createIngredientLookup,
     getIngredientNutrientBreakdown,
+    analyzeCookingComposition,
     NUTRIENT_BREAKDOWN_META,
     PROFILE_VERSION,
   };
@@ -464,6 +877,7 @@ if (typeof window !== 'undefined') {
     ensureNutritionProfile,
     createIngredientLookup,
     getIngredientNutrientBreakdown,
+    analyzeCookingComposition,
     NUTRIENT_BREAKDOWN_META,
     PROFILE_VERSION,
   };

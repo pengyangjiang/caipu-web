@@ -212,8 +212,22 @@ function formatBreakdownValue(value, unit) {
 }
 
 function renderNutrientBreakdownContent(breakdown) {
+  const formulaBlock = breakdown?.formulaSummary?.lines?.length
+    ? `
+      <section class="nutrient-breakdown-formula">
+        <h3 class="nutrient-breakdown-formula-title">计算公式</h3>
+        <ol class="nutrient-breakdown-formula-list">
+          ${breakdown.formulaSummary.lines.map((line) => `
+            <li class="nutrient-breakdown-formula-line is-${line.kind || "step"}">${line.text}</li>
+          `).join("")}
+        </ol>
+      </section>
+    `
+    : "";
+
   if (!breakdown?.hasData) {
     return `
+      ${formulaBlock}
       <div class="nutrient-breakdown-empty">
         暂时无法按食材拆分${breakdown?.label || "营养"}。<br />
         请确认原材料已填写用量，且对应食材已在食材库中有营养数据。
@@ -222,11 +236,12 @@ function renderNutrientBreakdownContent(breakdown) {
   }
 
   return `
+    ${formulaBlock}
     <div class="nutrient-breakdown-chart-wrap">
       <div class="nutrient-breakdown-pie" style="background: radial-gradient(circle at center, #fff 0 52%, transparent 53% 100%), ${buildPieGradient(breakdown.items)};">
         <div class="nutrient-breakdown-pie-inner">
           <p class="nutrient-breakdown-pie-value">${formatBreakdownValue(breakdown.total, breakdown.unit)}</p>
-          <p class="nutrient-breakdown-pie-label">合计 ${breakdown.label}</p>
+          <p class="nutrient-breakdown-pie-label">最终每份 ${breakdown.label}</p>
         </div>
       </div>
     </div>
@@ -239,6 +254,7 @@ function renderNutrientBreakdownContent(breakdown) {
             <div class="nutrient-breakdown-item-main">
               <p class="nutrient-breakdown-item-name">${item.name}</p>
               <p class="nutrient-breakdown-item-amount">${item.amount}</p>
+              ${item.formula ? `<p class="nutrient-breakdown-item-formula">${item.formula}</p>` : ""}
             </div>
             <div class="nutrient-breakdown-item-stats">
               <p class="nutrient-breakdown-item-value">${formatBreakdownValue(item.value, breakdown.unit)}</p>
@@ -266,12 +282,12 @@ function openNutrientBreakdownModal(recipe, nutrientKey) {
 
   nutrientBreakdownModal.style.setProperty("--nutrient-accent", breakdown.color);
   if (nutrientBreakdownTitle) {
-    nutrientBreakdownTitle.textContent = `${breakdown.label}来源`;
+    nutrientBreakdownTitle.textContent = `${breakdown.label}计算公式`;
   }
   if (nutrientBreakdownSubtitle) {
     nutrientBreakdownSubtitle.textContent = breakdown.hasData
-      ? `按已识别食材与用量估算，共 ${formatBreakdownValue(breakdown.total, breakdown.unit)}，扇形占比代表各食材贡献。`
-      : "以下食材尚未录入营养数据，或缺少可换算的用量。";
+      ? `下方为分项公式、加总与最终每份${breakdown.label}；扇形占比基于食材估算分项。`
+      : '部分食材尚未录入营养数据，仍展示可用的计算公式。';
   }
   if (nutrientBreakdownBody) {
     nutrientBreakdownBody.innerHTML = renderNutrientBreakdownContent(breakdown);
@@ -537,7 +553,7 @@ function renderSummaryRings(recipe) {
             data-nutrient-key="${item.nutrientKey}"
             role="button"
             tabindex="0"
-            aria-label="查看${item.label}来源"
+            aria-label="查看${item.label}计算公式"
           >
             <div class="summary-ring" style="--progress: ${item.ringPercent}; --ring-color: ${item.color};">
               <div class="summary-ring-inner">
@@ -546,7 +562,7 @@ function renderSummaryRings(recipe) {
               </div>
             </div>
             <p class="summary-ring-label">${item.label}</p>
-            <p class="summary-ring-hint">点击查看来源</p>
+            <p class="summary-ring-hint">点击查看计算公式</p>
           </article>
         `
       )}
@@ -625,6 +641,16 @@ function renderNutritionAnalysis(recipe) {
         ? "yellow"
         : "green";
 
+  const weightNote = profile.weightModel === 'cooked_yield_v1'
+    ? `估算成品：${profile.servingWeightG}g / 份${
+        profile.oilAbsorbedG
+          ? `（含吸油约 ${profile.oilAbsorbedG}g）`
+          : profile.dishOilG
+            ? `（含烹调用油 ${profile.dishOilG}g）`
+            : ''
+      }`
+    : `对应食材密度：${profile.servingWeightG}g / 份`;
+
   return `
     <div class="detail-section">
       <div class="detail-subtitle-row">
@@ -635,7 +661,7 @@ function renderNutritionAnalysis(recipe) {
         <article class="nutrition-analysis-card">
           <p class="nutrition-label">每100g热量</p>
           <p class="analysis-value">${profile.per100g.calories}<span class="nutrition-unit"> kcal</span></p>
-          <p class="metric-sub">对应食材密度：${profile.servingWeightG}g / 份</p>
+          <p class="metric-sub">${weightNote}</p>
         </article>
         <article class="nutrition-analysis-card">
           <p class="nutrition-label">每份热量</p>

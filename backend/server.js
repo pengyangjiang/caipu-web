@@ -299,13 +299,15 @@ async function handleDetail(req, res, type, id) {
       return;
     }
 
-    if (type !== 'recipe') {
+    if (type !== 'recipe' && type !== 'ingredient') {
       sendText(res, 405, 'Method Not Allowed');
       return;
     }
 
     try {
-      const deleted = store.deleteRecipe(id);
+      const deleted = type === 'recipe'
+        ? store.deleteRecipe(id)
+        : store.deleteIngredient(id);
       ok(res, deleted);
     } catch (error) {
       if (error.code === 'NOT_FOUND') {

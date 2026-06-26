@@ -18,12 +18,31 @@ if (!catalog) {
 const state = {
   query: "",
   category: "all",
+  canManage: false,
+  pendingDeleteIds: [],
 };
 
 const searchInput = document.getElementById("ingredientsSearch");
 const categoryChips = document.getElementById("ingredientsCategoryChips");
 const ingredientsMeta = document.getElementById("ingredientsMeta");
 const ingredientsSections = document.getElementById("ingredientsSections");
+const batchDeleteModal = document.getElementById("batchDeleteModal");
+const batchDeleteDesc = document.getElementById("batchDeleteDesc");
+const batchDeleteHint = document.getElementById("batchDeleteHint");
+const confirmBatchDeleteBtn = document.getElementById("confirmBatchDeleteBtn");
+
+const batchManager = window.listBatchUi?.createBatchManager({
+  root: ingredientsSections,
+  shellSelector: ".ingredients-shell",
+  itemUnit: "种",
+  barId: "ingredientsBatchBar",
+  toggleBtnId: "ingredientsBatchToggleBtn",
+  selectAllId: "ingredientsSelectAll",
+  countId: "ingredientsBatchCount",
+  deleteBtnId: "ingredientsBatchDeleteBtn",
+  canManage: false,
+  onDelete: (ids) => openBatchDeleteModal(ids),
+});
 
 document.title = "全部食材";
 
@@ -112,9 +131,17 @@ function renderIngredientRow(ingredient) {
   const aliasText = aliases.length ? aliases.slice(0, 3).join("、") : "—";
   const calories = Number(ingredient.caloriesPer100g || 0);
   const caloriesText = calories > 0 ? `${calories} kcal / 100g` : "热量待补充";
+  const checkbox = state.canManage
+    ? `
+      <label class="list-batch-check" aria-label="选择 ${escapeAttr(ingredient.name)}">
+        <input type="checkbox" data-batch-checkbox data-batch-id="${escapeAttr(ingredient.id)}" />
+      </label>
+    `
+    : "";
 
   return `
-    <li class="ingredient-row">
+    <li class="ingredient-row" data-batch-item data-batch-id="${escapeAttr(ingredient.id)}">
+      ${checkbox}
       <a class="ingredient-row-main" href="./ingredient.html?id=${encodeURIComponent(ingredient.id)}">
         <span class="ingredient-row-name">${escapeHtml(ingredient.name)}</span>
         <span class="ingredient-row-aliases">别名：${escapeHtml(aliasText)}</span>
@@ -153,6 +180,7 @@ function renderIngredients() {
 
   if (!ingredients.length) {
     ingredientsSections.innerHTML = renderEmpty("没有找到匹配的食材，试试换个关键词或分类。");
+    batchManager?.updateUI();
     return;
   }
 
@@ -171,6 +199,66 @@ function renderIngredients() {
       </section>
     `,
   );
+
+  batchManager?.updateUI();
+}
+
+function getIngredientNameById(id) {
+  return getAllIngredients().find((item) => item.id === id)?.name || id;
+}
+
+function openBatchDeleteModal(ids) {
+  if (!batchDeleteModal || !ids.length) return;
+  state.pendingDeleteIds = ids;
+  const names = ids.slice(0, 5).map(getIngredientNameById);
+  const more = ids.length > 5 ? `等 ${ids.length} 种食材` : "";
+  if (batchDeleteDesc) {
+    batchDeleteDesc.innerHTML = `即将删除：${names.map((name) => `「${escapeHtml(name)}」`).join("、")}${escapeHtml(more)}。删除后无法恢复。`;
+  }
+  if (batchDeleteHint) {
+    batchDeleteHint.textContent = api.isRemoteConfigured()
+      ? "此操作需要管理员权限，并会同步到线上数据。"
+      : "将从本机草稿中移除，刷新种子数据后可能再次出现。";
+  }
+  batchDeleteModal.hidden = false;
+  document.body.style.overflow = "hidden";
+  confirmBatchDeleteBtn?.focus();
+}
+
+function closeBatchDeleteModal() {
+  if (!batchDeleteModal) return;
+  batchDeleteModal.hidden = true;
+  document.body.style.overflow = "";
+  state.pendingDeleteIds = [];
+}
+
+async function confirmBatchDelete() {
+  if (!state.pendingDeleteIds.length || !api?.deleteManyContent) return;
+  if (!confirmBatchDeleteBtn) return;
+
+  confirmBatchDeleteBtn.disabled = true;
+  confirmBatchDeleteBtn.textContent = "正在删除...";
+
+  try {
+    const result = await api.deleteManyContent("ingredient", state.pendingDeleteIds);
+    closeBatchDeleteModal();
+    batchManager?.setEnabled(false);
+    await syncIngredientCatalog();
+    renderIngredients();
+    const count = result.deleted.length;
+    const failCount = result.failed?.length || 0;
+    window.uiToast?.show(
+      failCount ? `已删除 ${count} 种，${failCount} 种失败` : `已删除 ${count} 种食材`,
+      { type: failCount ? "error" : "success", duration: 1600 },
+    );
+  } catch (error) {
+    window.uiToast?.show(error?.message || "删除失败", { type: "error", duration: 2000 });
+  } finally {
+    if (confirmBatchDeleteBtn) {
+      confirmBatchDeleteBtn.disabled = false;
+      confirmBatchDeleteBtn.textContent = "确认删除";
+    }
+  }
 }
 
 async function syncIngredientCatalog() {
@@ -183,6 +271,18 @@ async function syncIngredientCatalog() {
   } catch {
     // fall back to bundled catalog
   }
+}
+
+function bindBatchModal() {
+  batchDeleteModal?.querySelectorAll("[data-close-batch-modal]").forEach((node) => {
+    node.addEventListener("click", closeBatchDeleteModal);
+  });
+  confirmBatchDeleteBtn?.addEventListener("click", confirmBatchDelete);
+  window.addEventListener("keydown", (event) => {
+    if (event.key === "Escape" && batchDeleteModal && !batchDeleteModal.hidden) {
+      closeBatchDeleteModal();
+    }
+  });
 }
 
 categoryChips.addEventListener("click", (event) => {
@@ -199,10 +299,24 @@ searchInput.addEventListener("input", () => {
 });
 
 async function init() {
+  if (api?.getSessionStatus) {
+    const session = await api.getSessionStatus();
+    state.canManage = api.canEdit() && (!api.isRemoteConfigured() || session.isAdmin);
+  } else {
+    state.canManage = api?.canEdit?.() || false;
+  }
+
+  if (batchManager) {
+    batchManager.canManage = state.canManage;
+    batchManager.bind();
+  }
+  bindBatchModal();
+
   api.mergeCatalogIngredients?.(catalog, []);
   await syncIngredientCatalog();
   renderCategoryChips();
   renderIngredients();
+  batchManager?.updateUI();
   searchInput.focus();
 }
 

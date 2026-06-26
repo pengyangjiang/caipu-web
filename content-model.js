@@ -42,7 +42,7 @@
       note: '',
       ...(normalized.calories || {}),
     };
-    if (normalized.nutritionProfile?.source !== 'manual' && window.nutritionProfileBuilder?.ensureNutritionProfile) {
+    if (window.nutritionProfileBuilder?.ensureNutritionProfile) {
       return window.nutritionProfileBuilder.ensureNutritionProfile(normalized, {
         ingredientDetails: window.ingredientDetails,
         catalogIngredients: window.recipeCatalog?.ingredients,

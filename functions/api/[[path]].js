@@ -70,9 +70,6 @@ function normalizeRecipe(record, ingredientSource) {
     note: '',
     ...(normalized.calories || {}),
   };
-  if (normalized.nutritionProfile?.source === 'manual') {
-    return normalized;
-  }
   return ensureNutritionProfile(normalized, {
     ingredientDetails: ingredientSource,
   }) || normalized;
@@ -392,7 +389,7 @@ async function handleDetail(request, env, type, id) {
       return fail('FORBIDDEN', 'Admin permission required', 403);
     }
 
-    if (type !== 'recipe') {
+    if (type !== 'recipe' && type !== 'ingredient') {
       return new Response('Method Not Allowed', { status: 405, headers: CORS_HEADERS });
     }
 
