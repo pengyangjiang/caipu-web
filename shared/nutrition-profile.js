@@ -6,7 +6,7 @@ const DAILY_REFERENCE = {
   fiber: 25,
 };
 
-const PROFILE_VERSION = 3;
+const PROFILE_VERSION = 4;
 
 const GRADE_RANK = {
   绿灯: 0,
@@ -15,16 +15,18 @@ const GRADE_RANK = {
 };
 
 const COOKING_METHOD_RULES = [
+  { method: 'air_fry', pattern: /空气炸|air\s*fry/i },
   { method: 'deep_fry', pattern: /炸|油炸|deep\s*fry/i },
   { method: 'pan_fry', pattern: /香煎|煎(?!饼)|pan\s*fry/i },
   { method: 'stir_fry', pattern: /炒|爆炒|stir\s*fry/i },
   { method: 'boil', pattern: /煮|焯|炖|boil/i },
   { method: 'steam', pattern: /蒸|steam/i },
-  { method: 'roast', pattern: /烤|烘|roast/i },
+  { method: 'roast', pattern: /烤|烘|烤箱|roast|bake|oven/i },
 ];
 
 const YIELD_BY_METHOD = {
   deep_fry: 0.62,
+  air_fry: 0.78,
   pan_fry: 0.78,
   stir_fry: 0.88,
   boil: 0.92,
@@ -34,9 +36,9 @@ const YIELD_BY_METHOD = {
 };
 
 const INGREDIENT_YIELD_OVERRIDE = {
-  土豆: { deep_fry: 0.60 },
-  马铃薯: { deep_fry: 0.60 },
-  红薯: { deep_fry: 0.65 },
+  土豆: { deep_fry: 0.60, air_fry: 0.76 },
+  马铃薯: { deep_fry: 0.60, air_fry: 0.76 },
+  红薯: { deep_fry: 0.65, air_fry: 0.80 },
 };
 
 /** 炸制：按成品固态吸油比例估算（大锅油仅少量进入成品，取 solid 与 usage 的较大值） */
@@ -105,6 +107,13 @@ function isOilIngredient(name) {
   return /(?:油|黄油|猪油|酥油|margarine)/i.test(text);
 }
 
+function usesFullAddedOil(cookingMethod) {
+  return cookingMethod === 'air_fry'
+    || cookingMethod === 'roast'
+    || cookingMethod === 'stir_fry'
+    || cookingMethod === 'pan_fry';
+}
+
 function classifyIngredient(item, groupName, cookingMethod) {
   const name = String(item.name || '').trim();
   const group = String(groupName || '').trim();
@@ -112,18 +121,17 @@ function classifyIngredient(item, groupName, cookingMethod) {
   if (isExcludedBulkLiquid(name, item.amount)) return 'excluded';
 
   if (isOilIngredient(name)) {
-    if (/炸|deep/i.test(group) || cookingMethod === 'deep_fry') {
+    if (cookingMethod === 'deep_fry' && (/炸|deep/i.test(group))) {
       return 'pot_oil';
     }
     if (
-      cookingMethod === 'stir_fry'
-      || cookingMethod === 'pan_fry'
+      usesFullAddedOil(cookingMethod)
       || /炒|煎|料|辅|调味|制作|烹/i.test(group)
     ) {
       return 'dish_oil';
     }
     const grams = parseAmountToGrams(item.amount);
-    if (grams >= 120) return 'pot_oil';
+    if (grams >= 120 && cookingMethod === 'deep_fry') return 'pot_oil';
     return 'dish_oil';
   }
 
@@ -306,7 +314,7 @@ function analyzeCookingComposition(recipe, lookup) {
   }
 
   let oilAbsorbedG = 0;
-  if (method === 'deep_fry' || potOilUsedG > 0) {
+  if (method === 'deep_fry') {
     oilAbsorbedG = estimateDeepFryOilAbsorptionG(finishedSolidG, potOilUsedG, recipe);
     totals.fat += oilAbsorbedG;
     totals.calories += oilAbsorbedG * OIL_CALORIES_PER_G;
@@ -722,9 +730,14 @@ function buildFormulaSummary(recipe, nutrientKey, meta, items, composition, opti
       text: `炸制成品固态约 ${composition.finishedSolidG}g，吸油约 ${composition.oilAbsorbedG}g；大锅炸油 ${composition.potOilUsedG}g 不全额计入。`,
     });
   } else if (composition?.dishOilG > 0) {
+    const methodNote = composition.method === 'air_fry'
+      ? '空气炸锅/少油烘烤'
+      : composition.method === 'roast'
+        ? '烤箱/烘烤'
+        : '炒煎等';
     lines.push({
       kind: 'note',
-      text: `烹调用油 ${composition.dishOilG}g 全额计入成品重量与营养。`,
+      text: `${methodNote}：添加用油 ${composition.dishOilG}g 全额计入成品重量与营养，不按固态重量×吸油率估算。`,
     });
   }
 
